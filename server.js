@@ -397,7 +397,7 @@ io.on('connection', (socket) => {
     for (const m of db.messages[chat.id] || []) {
       if (m.from !== me && !m.deliveredTo.includes(me)) {
         m.deliveredTo.push(me);
-        if (m.from) emitToUser(m.from, 'message:status', statusOf(chat.id, m));
+        if (m.from) emitToUser(m.from, 'message:status', updateStatus(chat.id, m));
       }
     }
   }
@@ -496,7 +496,7 @@ io.on('connection', (socket) => {
       if (m.from !== me && !m.readBy.includes(me)) {
         m.readBy.push(me);
         if (!m.deliveredTo.includes(me)) m.deliveredTo.push(me);
-        if (m.from) emitToUser(m.from, 'message:status', statusOf(chatId, m));
+        if (m.from) emitToUser(m.from, 'message:status', updateStatus(chatId, m));
         changed = true;
       }
     }
@@ -526,6 +526,13 @@ io.on('connection', (socket) => {
   });
 });
 
+// Store the new tick state on the message so reopened chats show it too.
+function updateStatus(chatId, m) {
+  const s = statusOf(chatId, m);
+  m.status = s.status;
+  return s;
+}
+
 function statusOf(chatId, m) {
   const others = chatMembers(chatId).filter((id) => id !== m.from);
   let status = 'sent';
@@ -548,7 +555,7 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
     deliveredTo: members.filter((id) => id !== from && online.has(id)),
     readBy: [],
   };
-  msg.status = statusOf(chatId, msg).status;
+  updateStatus(chatId, msg);
   (db.messages[chatId] = db.messages[chatId] || []).push(msg);
   save();
   for (const uid of members) {
