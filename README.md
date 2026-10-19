@@ -29,19 +29,40 @@ network: office LAN, home Wi-Fi or mobile data.
 
 People on other networks can't reach `localhost` or `192.168.x.x`. Pick one of these:
 
-### Option A: Public link from your PC (free, quickest)
+### Option A: Permanent link from your PC (free, recommended)
 
 Double-click **`start-online.bat`** (Windows) or run `./start-online.sh` (macOS/Linux).
+It uses [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) to give your PC a public
+HTTPS address that **never changes**, like `https://coop-connect.tail1234.ts.net`.
 
-- The first time on Windows, it installs Cloudflare Tunnel (`cloudflared`) for you. Then run it again.
-- It prints a link like `https://blue-river-1234.trycloudflare.com`. Share it with anyone.
-  It works over any network, with HTTPS.
-- Keep the PC on and the window open while people chat.
-- The link changes each time you restart it. For a permanent address, use Option B, or a
-  [named Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
-  with your own domain.
+The first time only:
+
+1. Click **Yes** when Windows asks for administrator permission.
+2. Tailscale is installed for you. Sign in in the browser window that opens, with any
+   Google, Microsoft, Apple or GitHub account. It's free.
+3. If Tailscale shows a link to **enable Funnel**, open it and click **Enable**.
+4. The window prints your permanent link. Share it with everyone.
+
+After that, just double-click `start-online.bat` whenever you start the PC, and the same
+link works again. Keep the PC on and the *Coop Connect server* window open while people chat.
+
+**Nicer link name:** the address is `https://<pc-name>.<tailnet-name>.ts.net`. In the
+[Tailscale admin console](https://login.tailscale.com/admin/machines), rename the machine
+to e.g. `coop-connect`. You can also pick a friendlier tailnet name under **DNS**. Do
+this once, before you share the link.
+
+**Turn the public link off:** run `tailscale funnel reset` in an administrator window.
+
+**Just a quick test?** `start-quick-link.bat` (or `./start-quick-link.sh`) gives a
+temporary `trycloudflare.com` link with no sign-in, but it changes on every start.
+
+**Your own domain** (like `chat.yourcoop.in`): use a
+[named Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/create-remote-tunnel/)
+pointing at `http://localhost:3000`.
 
 ### Option B: Host it in the cloud (always on, permanent address)
+
+Use this if the PC can't stay on. The address is fixed too.
 
 **Render (easiest):**
 

@@ -121,8 +121,8 @@ function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
   try {
-    const host = req.headers['x-forwarded-host'] || req.headers.host;
-    return new URL(origin).host === host;
+    const originHost = new URL(origin).host;
+    return originHost === req.headers.host || originHost === req.headers['x-forwarded-host'];
   } catch {
     return false;
   }
