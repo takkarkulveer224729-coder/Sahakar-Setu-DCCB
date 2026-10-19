@@ -1,0 +1,29 @@
+{
+  "name": "sahakar-setu-dccb",
+  "version": "1.0.0",
+  "description": "Sahakar Setu Chat - WhatsApp-style chat and file sharing for your PC and office network",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takkarkulveer224729-coder/Sahakar-Setu-DCCB.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/takkarkulveer224729-coder/Sahakar-Setu-DCCB/issues"
+  },
+  "homepage": "https://github.com/takkarkulveer224729-coder/Sahakar-Setu-DCCB#readme",
+  "dependencies": {
+    "express": "^4.22.3",
+    "multer": "^2.4.0",
+    "socket.io": "^4.8.4"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "private": true
+}
