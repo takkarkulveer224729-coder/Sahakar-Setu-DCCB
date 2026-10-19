@@ -1,10 +1,9 @@
-/* Sahakar Setu Chat - browser client */
+/* Coop Connect - browser client */
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const socket = io({ autoConnect: false });
 
   const state = {
-    token: localStorage.getItem('chat-token'),
     me: null,
     users: new Map(),
     chats: new Map(),
@@ -170,15 +169,44 @@
   function updateTitle() {
     let total = 0;
     for (const c of state.chats.values()) total += c.unread;
-    document.title = total ? `(${total}) Sahakar Setu Chat` : 'Sahakar Setu Chat';
+    document.title = total ? `(${total}) Coop Connect` : 'Coop Connect';
   }
 
   // ---------- Auth ----------
 
+  async function api(path, body) {
+    const res = await fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify(body || {}),
+    });
+    let data = {};
+    try { data = await res.json(); } catch { /* empty body */ }
+    if (!res.ok) throw new Error(data.error || 'Something went wrong, please try again');
+    return data;
+  }
+
+  function showAuthForm(which) {
+    const login = which === 'login';
+    $('#tab-login').classList.toggle('active', login);
+    $('#tab-register').classList.toggle('active', !login);
+    $('#login-form').classList.toggle('hidden', !login);
+    $('#register-form').classList.toggle('hidden', login);
+    for (const err of document.querySelectorAll('[data-error]')) err.textContent = '';
+    (login ? $('#login-username') : $('#reg-name')).focus();
+  }
+  $('#tab-login').addEventListener('click', () => showAuthForm('login'));
+  $('#tab-register').addEventListener('click', () => showAuthForm('register'));
+  for (const a of document.querySelectorAll('[data-switch]')) {
+    a.addEventListener('click', (e) => { e.preventDefault(); showAuthForm(a.dataset.switch); });
+  }
+
   function showLogin() {
+    state.me = null;
     $('#app').classList.add('hidden');
     $('#login').classList.remove('hidden');
-    $('#login-name').focus();
+    $('#login-username').focus();
   }
 
   function startApp(data) {
@@ -190,53 +218,72 @@
     const myAv = $('#my-avatar');
     myAv.textContent = initials(state.me.name);
     myAv.style.background = state.me.color;
-    myAv.title = state.me.name + ' — profile';
+    myAv.title = `${state.me.name} (@${state.me.username}) — profile`;
     renderChatList();
     if (state.current) openChat({ chatId: state.current.id });
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
   }
 
+  async function submitAuth(form, path, body) {
+    const btn = form.querySelector('button[type=submit]');
+    const err = form.querySelector('[data-error]');
+    err.textContent = '';
+    btn.disabled = true;
+    try {
+      await api(path, body);
+      for (const input of form.querySelectorAll('input[type=password]')) input.value = '';
+      socket.connect();
+    } catch (e) {
+      err.textContent = e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   $('#login-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const btn = e.target.querySelector('button');
-    btn.disabled = true;
-    $('#login-error').textContent = '';
-    if (!socket.connected) socket.connect();
-    socket.emit('auth:login', { name: $('#login-name').value, password: $('#login-pass').value }, (res) => {
-      btn.disabled = false;
-      if (res.error) return ($('#login-error').textContent = res.error);
-      state.token = res.token;
-      localStorage.setItem('chat-token', res.token);
-      $('#login-pass').value = '';
-      startApp(res);
+    submitAuth(e.target, '/api/login', { username: $('#login-username').value, password: $('#login-pass').value });
+  });
+
+  $('#register-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if ($('#reg-pass').value !== $('#reg-pass2').value) {
+      e.target.querySelector('[data-error]').textContent = 'Passwords do not match';
+      return;
+    }
+    submitAuth(e.target, '/api/register', {
+      name: $('#reg-name').value,
+      username: $('#reg-username').value,
+      password: $('#reg-pass').value,
     });
   });
 
-  $('#btn-logout').addEventListener('click', () => {
-    if (!confirm('Log out of Sahakar Setu Chat on this PC?')) return;
-    socket.emit('auth:logout', { token: state.token });
-    localStorage.removeItem('chat-token');
-    state.token = null;
+  $('#btn-logout').addEventListener('click', async () => {
+    if (!confirm('Log out of Coop Connect on this device?')) return;
+    socket.disconnect();
+    await api('/api/logout').catch(() => {});
     state.current = null;
     closeChatView();
+    closePanel();
     showLogin();
   });
 
-  socket.on('connect', () => {
-    if (!state.token) return showLogin();
-    socket.emit('auth:resume', { token: state.token }, (res) => {
-      if (res.error) {
-        localStorage.removeItem('chat-token');
-        state.token = null;
-        return showLogin();
-      }
-      startApp(res);
-    });
+  socket.on('bootstrap', startApp);
+
+  socket.on('connect_error', (err) => {
+    if (err.message === 'unauthorized') showLogin();
+    else if (state.me) toast('Cannot reach Coop Connect — retrying…');
   });
 
   socket.on('disconnect', (reason) => {
-    if (state.token && reason !== 'io client disconnect') toast('Connection lost — reconnecting…');
-    if (reason === 'io server disconnect' && state.token) socket.connect();
+    // The server ends the connection when this session is logged out elsewhere.
+    if (reason === 'io server disconnect') {
+      state.current = null;
+      closeChatView();
+      showLogin();
+    } else if (reason !== 'io client disconnect') {
+      toast('Connection lost — reconnecting…');
+    }
   });
 
   // ---------- Chat list ----------
@@ -255,7 +302,7 @@
     // When searching, also offer people you haven't chatted with yet.
     if (q) {
       const known = new Set(chats.filter((c) => c.type === 'dm').map((c) => c.peer));
-      const people = [...state.users.values()].filter((u) => !known.has(u.id) && u.name.toLowerCase().includes(q));
+      const people = [...state.users.values()].filter((u) => !known.has(u.id) && (u.name.toLowerCase().includes(q) || u.username.includes(q)));
       if (people.length) {
         list.append(el('div', { class: 'section-label' }, 'Contacts'));
         for (const u of people) list.append(personItem(u, () => openChat({ peerId: u.id })));
@@ -297,7 +344,7 @@
       avatar(u.name, u.color, 'lg', u.online && u.id !== state.me.id),
       el('div', { class: 'body' },
         el('span', { class: 'name' }, u.id === state.me.id ? u.name + ' (You)' : u.name),
-        el('span', { class: 'sub' }, u.about || ''),
+        el('span', { class: 'sub' }, '@' + u.username + (u.about ? ' · ' + u.about : '')),
       ),
       extra,
     );
@@ -330,7 +377,7 @@
         el('div', { class: 'avatar lg', style: 'background: var(--accent)' }, '👥'),
         el('div', { class: 'body' }, el('span', { class: 'name' }, 'New group')),
       ),
-      el('div', { class: 'section-label' }, 'People on Sahakar Setu Chat'),
+      el('div', { class: 'section-label' }, 'People on Coop Connect'),
       users.length > 1 ? users.map((u) => personItem(u, () => { closePanel(); openChat({ peerId: u.id }); }))
         : el('div', { class: 'empty-list' }, 'Nobody else has joined yet. Ask colleagues to open this app\'s address in their browser.'),
     ]);
@@ -365,13 +412,29 @@
 
   $('#my-avatar').addEventListener('click', () => {
     const about = el('input', { value: state.me.about || '', maxlength: 140 });
+    const current = el('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
+    const next = el('input', { type: 'password', placeholder: 'New password (min 6 characters)', autocomplete: 'new-password' });
+    const next2 = el('input', { type: 'password', placeholder: 'Confirm new password', autocomplete: 'new-password' });
     openPanel('Profile', [
       avatar(state.me.name, state.me.color, 'xl'),
-      el('div', { class: 'field' }, el('label', {}, 'Your name'), el('div', { style: 'font-size:17px' }, state.me.name)),
+      el('div', { class: 'field' }, el('label', {}, 'Your name'),
+        el('div', { style: 'font-size:17px' }, state.me.name),
+        el('div', { class: 'username' }, '@' + state.me.username)),
       el('div', { class: 'field' }, el('label', {}, 'About'), about),
       el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: () => {
         socket.emit('profile:update', { about: about.value }, () => { state.me.about = about.value; toast('Profile saved'); closePanel(); });
       } }, 'Save')),
+      el('div', { class: 'field pw-form' }, el('label', {}, 'Change password'), current, next, next2),
+      el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: async () => {
+        if (next.value !== next2.value) return toast('New passwords do not match');
+        try {
+          await api('/api/password', { current: current.value, next: next.value });
+          toast('Password changed. Other devices were logged out.');
+          closePanel();
+        } catch (e) {
+          toast(e.message);
+        }
+      } }, 'Change password')),
     ]);
   });
 
@@ -684,7 +747,6 @@
       const form = new FormData();
       form.append('file', file);
       xhr.open('POST', '/api/upload');
-      xhr.setRequestHeader('x-session-token', state.token);
       bar.classList.remove('hidden');
       fill.style.width = '0';
       xhr.upload.onprogress = (e) => { if (e.lengthComputable) fill.style.width = (e.loaded / e.total) * 100 + '%'; };
@@ -822,6 +884,6 @@
   setInterval(() => { if (state.me) { renderHeader(); } }, 60000);
 
   // ---------- Boot ----------
-  if (state.token) socket.connect();
-  else showLogin();
+  // The session cookie (if any) is checked when the socket connects.
+  socket.connect();
 })();

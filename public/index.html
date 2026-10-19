@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sahakar Setu Chat</title>
+  <title>Coop Connect</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,13 +12,41 @@
   <div id="login" class="login hidden">
     <div class="login-card">
       <div class="login-logo">💬</div>
-      <h1>Sahakar Setu Chat</h1>
-      <p class="muted">Chat and share files with everyone on your network.<br>New name? An account is created for you.</p>
+      <h1>Coop Connect</h1>
+      <p class="muted">Chat and share files with your co-op, from anywhere.</p>
+      <div class="tabs" role="tablist">
+        <button type="button" id="tab-login" class="tab active" role="tab">Log in</button>
+        <button type="button" id="tab-register" class="tab" role="tab">Create account</button>
+      </div>
+
       <form id="login-form">
-        <input id="login-name" placeholder="Your name" maxlength="32" autocomplete="username" required>
-        <input id="login-pass" type="password" placeholder="Password (min 4 characters)" autocomplete="current-password" required>
-        <button type="submit" class="btn-primary">Continue</button>
-        <div id="login-error" class="error"></div>
+        <label>Username
+          <input id="login-username" placeholder="e.g. asha.patil" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+        </label>
+        <label>Password
+          <input id="login-pass" type="password" placeholder="Your password" autocomplete="current-password" required>
+        </label>
+        <button type="submit" class="btn-primary">Log in</button>
+        <div class="error" data-error></div>
+        <p class="muted small">New here? <a href="#" data-switch="register">Create an account</a></p>
+      </form>
+
+      <form id="register-form" class="hidden">
+        <label>Full name
+          <input id="reg-name" placeholder="e.g. Asha Patil" maxlength="32" autocomplete="name" required>
+        </label>
+        <label>Username
+          <input id="reg-username" placeholder="3–20 letters, numbers, . or _" maxlength="20" autocomplete="username" autocapitalize="none" spellcheck="false" pattern="[A-Za-z0-9._]{3,20}" required>
+        </label>
+        <label>Password
+          <input id="reg-pass" type="password" placeholder="At least 6 characters" minlength="6" autocomplete="new-password" required>
+        </label>
+        <label>Confirm password
+          <input id="reg-pass2" type="password" placeholder="Type it again" minlength="6" autocomplete="new-password" required>
+        </label>
+        <button type="submit" class="btn-primary">Create account</button>
+        <div class="error" data-error></div>
+        <p class="muted small">Already have an account? <a href="#" data-switch="login">Log in</a></p>
       </form>
     </div>
   </div>
@@ -60,7 +88,7 @@
     <main id="main" class="main">
       <div id="welcome" class="welcome">
         <div class="welcome-art">💬</div>
-        <h1>Sahakar Setu Chat</h1>
+        <h1>Coop Connect</h1>
         <p class="muted">Send and receive messages, photos, videos and documents.<br>Pick a chat on the left or start a new one.</p>
       </div>
 

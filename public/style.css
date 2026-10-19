@@ -575,3 +575,22 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
 
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-thumb { background: rgba(134, 150, 160, 0.4); }
+
+/* ---------- Login tabs & forms ---------- */
+.tabs { display: flex; margin-top: 20px; border-bottom: 1px solid var(--border); }
+.tab {
+  flex: 1;
+  background: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  padding: 10px;
+  cursor: pointer;
+  color: var(--muted);
+  font-weight: 600;
+}
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.login-card label { display: flex; flex-direction: column; gap: 6px; text-align: left; font-size: 13px; color: var(--muted); }
+.login-card a { color: var(--accent); }
+.small { font-size: 13px; margin: 0; }
+.pw-form { display: flex; flex-direction: column; gap: 14px; }
+.panel-body .username { color: var(--muted); font-size: 14px; margin-top: 4px; }

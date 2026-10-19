@@ -1,6 +1,6 @@
-// Sahakar Setu Chat - a WhatsApp-style chat & file sharing server.
-// Run with `npm start`, then open http://localhost:3000 on this PC
-// (other PCs on the same network can use http://<this-pc-ip>:3000).
+// Coop Connect - a WhatsApp-style chat & file sharing server.
+// Run with `npm start`, then open http://localhost:3000. To reach it from any
+// network, put it online (see README: public link or cloud hosting).
 
 const path = require('path');
 const fs = require('fs');
@@ -11,11 +11,15 @@ const express = require('express');
 const multer = require('multer');
 const { Server } = require('socket.io');
 
+const APP_NAME = 'Coop Connect';
 const PORT = Number(process.env.PORT) || 3000;
-const DATA_DIR = path.join(__dirname, 'data');
+const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
 const DB_FILE = path.join(DATA_DIR, 'db.json');
-const UPLOAD_DIR = path.join(__dirname, 'uploads');
+const UPLOAD_DIR = path.resolve(process.env.UPLOAD_DIR || path.join(DATA_DIR, '..', 'uploads'));
 const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 100;
+const SESSION_DAYS = 30;
+const COOKIE = 'cc_session';
+const USERNAME_RE = /^[a-z0-9._]{3,20}$/;
 const INLINE_TYPES = /^(image\/(png|jpe?g|gif|webp|bmp)|video\/(mp4|webm|ogg)|audio\/(mpeg|ogg|wav|webm|mp4|x-m4a)|application\/pdf)$/;
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -23,13 +27,27 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ---------- Persistence (a simple JSON file) ----------
 
-let db = { users: {}, sessions: {}, groups: {}, messages: {} };
+let db = { users: {}, sessions: {}, groups: {}, messages: {}, files: {} };
 if (fs.existsSync(DB_FILE)) {
   try {
     db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
   } catch (err) {
     console.error('Could not read database, starting fresh:', err.message);
   }
+}
+
+// Older data: give every user a username and drop old-style sessions.
+for (const u of Object.values(db.users)) {
+  if (!u.username) {
+    let base = u.name.toLowerCase().replace(/[^a-z0-9._]/g, '').slice(0, 16) || 'user';
+    if (base.length < 3) base = base.padEnd(3, '0');
+    let candidate = base;
+    for (let n = 2; Object.values(db.users).some((x) => x.username === candidate); n++) candidate = base + n;
+    u.username = candidate;
+  }
+}
+for (const [token, s] of Object.entries(db.sessions)) {
+  if (typeof s !== 'object' || s.expires < Date.now()) delete db.sessions[token];
 }
 
 let saveTimer = null;
@@ -59,7 +77,69 @@ function checkPassword(user, password) {
   return crypto.timingSafeEqual(Buffer.from(hash, 'hex'), Buffer.from(user.hash, 'hex'));
 }
 
+function passwordProblem(password) {
+  if (password.length < 6) return 'Password must be at least 6 characters';
+  if (password.length > 128) return 'Password is too long';
+  return null;
+}
+
 const COLORS = ['#00a884', '#53bdeb', '#e542a3', '#ffb02e', '#7f66ff', '#fc4c4c', '#25d366', '#ff7f50', '#02a698', '#a066aa'];
+
+// ---------- Sessions ----------
+
+function parseCookies(header = '') {
+  const out = {};
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i > 0) out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+function sessionUser(cookieHeader) {
+  const token = parseCookies(cookieHeader)[COOKIE];
+  const s = token && db.sessions[token];
+  if (!s || s.expires < Date.now() || !db.users[s.userId]) return null;
+  return { token, userId: s.userId };
+}
+
+function startSession(req, res, userId) {
+  const token = crypto.randomBytes(32).toString('hex');
+  db.sessions[token] = { userId, expires: Date.now() + SESSION_DAYS * 86400000 };
+  save();
+  res.cookie(COOKIE, token, {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure,
+    maxAge: SESSION_DAYS * 86400000,
+    path: '/',
+  });
+}
+
+// Requests from other websites must not act with the user's cookie.
+function sameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    const host = req.headers['x-forwarded-host'] || req.headers.host;
+    return new URL(origin).host === host;
+  } catch {
+    return false;
+  }
+}
+
+// Slow down password guessing: 10 failed logins per 15 minutes per address.
+const failures = new Map();
+function tooManyFailures(key) {
+  const f = failures.get(key);
+  if (f && f.reset < Date.now()) failures.delete(key);
+  return (failures.get(key) || { count: 0 }).count >= 10;
+}
+function recordFailure(key) {
+  const f = failures.get(key) || { count: 0, reset: Date.now() + 15 * 60000 };
+  f.count++;
+  failures.set(key, f);
+}
 
 // ---------- Helpers ----------
 
@@ -69,6 +149,7 @@ function publicUser(u) {
   return {
     id: u.id,
     name: u.name,
+    username: u.username,
     about: u.about,
     color: u.color,
     online: online.has(u.id),
@@ -80,10 +161,12 @@ function dmId(a, b) {
   return 'dm:' + [a, b].sort().join(':');
 }
 
+const isUser = (id) => typeof id === 'string' && Object.hasOwn(db.users, id);
+
 function chatMembers(chatId) {
+  if (typeof chatId !== 'string') return [];
   if (chatId.startsWith('dm:')) return [...new Set(chatId.slice(3).split(':'))];
-  const group = db.groups[chatId];
-  return group ? group.members : [];
+  return Object.hasOwn(db.groups, chatId) ? db.groups[chatId].members : [];
 }
 
 function canAccess(userId, chatId) {
@@ -131,18 +214,129 @@ function broadcastPresence(userId) {
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { maxHttpBufferSize: 1e6 });
+const io = new Server(server, {
+  maxHttpBufferSize: 1e6,
+  allowRequest: (req, cb) => cb(null, sameOrigin(req)),
+});
 
+// Behind a tunnel or cloud host the real client address / https comes from the proxy.
+const TRUST_PROXY = process.env.TRUST_PROXY || 'loopback, linklocal, uniquelocal';
+app.set('trust proxy', /^\d+$/.test(TRUST_PROXY) ? Number(TRUST_PROXY) : TRUST_PROXY);
 app.disable('x-powered-by');
-app.use(express.static(path.join(__dirname, 'public')));
-
-// Uploaded files: images/video/audio/pdf can be shown inline; everything else
-// is forced to download so uploaded HTML/JS can never run on this origin.
-app.use('/uploads', (req, res, next) => {
-  const meta = db.files && db.files[path.basename(req.path)];
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  if (req.method !== 'GET' && req.method !== 'HEAD' && !sameOrigin(req)) {
+    return res.status(403).json({ error: 'Cross-site request blocked' });
+  }
+  next();
+});
+app.use(express.static(path.join(__dirname, 'public'), {
+  setHeaders: (res) => res.setHeader('Content-Security-Policy',
+    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'"),
+}));
+app.use('/api', express.json({ limit: '10kb' }));
+
+function requireLogin(req, res, next) {
+  const s = sessionUser(req.headers.cookie);
+  if (!s) return res.status(401).json({ error: 'Please log in' });
+  req.userId = s.userId;
+  req.token = s.token;
+  next();
+}
+
+app.post('/api/register', (req, res) => {
+  const name = String(req.body.name || '').trim().slice(0, 32);
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  if (name.length < 2) return res.status(400).json({ error: 'Please enter your full name' });
+  if (!USERNAME_RE.test(username)) {
+    return res.status(400).json({ error: 'Username must be 3–20 characters: letters, numbers, dot or underscore' });
+  }
+  const problem = passwordProblem(password);
+  if (problem) return res.status(400).json({ error: problem });
+  if (Object.values(db.users).some((u) => u.username === username)) {
+    return res.status(409).json({ error: 'That username is already taken' });
+  }
+  const id = newId();
+  const user = {
+    id,
+    name,
+    username,
+    about: `Hey there! I am using ${APP_NAME}.`,
+    color: COLORS[Object.keys(db.users).length % COLORS.length],
+    lastSeen: Date.now(),
+    ...hashPassword(password),
+  };
+  db.users[id] = user;
+  io.emit('user:new', publicUser(user));
+  startSession(req, res, id);
+  res.json({ ok: true });
+});
+
+app.post('/api/login', (req, res) => {
+  const username = String(req.body.username || '').trim().toLowerCase();
+  const password = String(req.body.password || '');
+  const key = req.ip + '|' + username;
+  if (tooManyFailures(key)) {
+    return res.status(429).json({ error: 'Too many failed attempts. Try again in 15 minutes.' });
+  }
+  const user = Object.values(db.users).find((u) => u.username === username);
+  if (!user || !checkPassword(user, password)) {
+    recordFailure(key);
+    return res.status(401).json({ error: 'Wrong username or password' });
+  }
+  failures.delete(key);
+  startSession(req, res, user.id);
+  res.json({ ok: true });
+});
+
+app.post('/api/logout', (req, res) => {
+  const s = sessionUser(req.headers.cookie);
+  if (s) {
+    delete db.sessions[s.token];
+    save();
+    io.in('session:' + s.token).disconnectSockets(true);
+  }
+  res.clearCookie(COOKIE, { path: '/' });
+  res.json({ ok: true });
+});
+
+app.post('/api/password', requireLogin, (req, res) => {
+  const user = db.users[req.userId];
+  const current = String(req.body.current || '');
+  const next = String(req.body.next || '');
+  const key = req.ip + '|' + user.username;
+  if (tooManyFailures(key)) return res.status(429).json({ error: 'Too many failed attempts. Try again later.' });
+  if (!checkPassword(user, current)) {
+    recordFailure(key);
+    return res.status(401).json({ error: 'Current password is wrong' });
+  }
+  const problem = passwordProblem(next);
+  if (problem) return res.status(400).json({ error: problem });
+  Object.assign(user, hashPassword(next));
+  // Log out every other device.
+  for (const [token, s] of Object.entries(db.sessions)) {
+    if (s.userId === user.id && token !== req.token) {
+      delete db.sessions[token];
+      io.in('session:' + token).disconnectSockets(true);
+    }
+  }
+  save();
+  res.json({ ok: true });
+});
+
+// Shared files are only visible to people in a chat they were sent to.
+// Images/video/audio/pdf can be shown inline; everything else is forced to
+// download so uploaded HTML/JS can never run on this site.
+app.use('/uploads', requireLogin, (req, res, next) => {
+  const id = path.basename(req.path);
+  const meta = Object.hasOwn(db.files, id) && db.files[id];
+  const allowed = meta && (meta.owner === req.userId || (meta.chats || []).some((c) => canAccess(req.userId, c)));
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; sandbox");
-  if (!meta) return res.status(404).end();
+  res.setHeader('Cache-Control', 'private, max-age=86400');
+  if (!allowed) return res.status(404).end();
   const inline = meta.mime && INLINE_TYPES.test(meta.mime);
   // res.attachment() guesses a type from the file name, so set the real one after it.
   if (!inline || req.query.download) res.attachment(meta.name);
@@ -158,15 +352,7 @@ const upload = multer({
   limits: { fileSize: MAX_UPLOAD_MB * 1024 * 1024 },
 });
 
-function authHttp(req, res, next) {
-  const token = req.get('x-session-token');
-  const userId = token && db.sessions[token];
-  if (!userId || !db.users[userId]) return res.status(401).json({ error: 'Not logged in' });
-  req.userId = userId;
-  next();
-}
-
-app.post('/api/upload', authHttp, (req, res) => {
+app.post('/api/upload', requireLogin, (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
       const msg = err.code === 'LIMIT_FILE_SIZE' ? `File is larger than ${MAX_UPLOAD_MB} MB` : err.message;
@@ -181,85 +367,46 @@ app.post('/api/upload', authHttp, (req, res) => {
       size: req.file.size,
       mime: req.file.mimetype || 'application/octet-stream',
       owner: req.userId,
+      chats: [],
     };
-    db.files = db.files || {};
     db.files[file.id] = file;
     save();
-    res.json({ ...file, url: '/uploads/' + file.id });
+    res.json({ id: file.id, name: file.name, size: file.size, mime: file.mime, url: '/uploads/' + file.id });
   });
 });
 
 // ---------- Realtime ----------
 
+io.use((socket, next) => {
+  const s = sessionUser(socket.request.headers.cookie);
+  if (!s) return next(new Error('unauthorized'));
+  socket.data.userId = s.userId;
+  socket.data.token = s.token;
+  next();
+});
+
 io.on('connection', (socket) => {
-  let me = null; // logged in user id
+  const me = socket.data.userId;
+  socket.join('user:' + me);
+  socket.join('session:' + socket.data.token);
+  if (!online.has(me)) online.set(me, new Set());
+  online.get(me).add(socket.id);
 
-  function attach(userId, ack) {
-    me = userId;
-    socket.join('user:' + me);
-    if (!online.has(me)) online.set(me, new Set());
-    online.get(me).add(socket.id);
-
-    // Anything sent to this user while offline is now delivered.
-    for (const chat of userChats(me)) {
-      for (const m of db.messages[chat.id] || []) {
-        if (m.from !== me && !m.deliveredTo.includes(me)) {
-          m.deliveredTo.push(me);
-          emitToUser(m.from, 'message:status', statusOf(chat.id, m));
-        }
+  // Anything sent to this user while offline is now delivered.
+  for (const chat of userChats(me)) {
+    for (const m of db.messages[chat.id] || []) {
+      if (m.from !== me && !m.deliveredTo.includes(me)) {
+        m.deliveredTo.push(me);
+        if (m.from) emitToUser(m.from, 'message:status', statusOf(chat.id, m));
       }
     }
-    save();
-    broadcastPresence(me);
-    ack({ ok: true, ...bootstrap(me) });
   }
-
-  function bootstrap(userId) {
-    return {
-      me: publicUser(db.users[userId]),
-      users: Object.values(db.users).map(publicUser),
-      chats: userChats(userId),
-    };
-  }
-
-  socket.on('auth:login', ({ name, password } = {}, ack = () => {}) => {
-    name = String(name || '').trim().slice(0, 32);
-    password = String(password || '');
-    if (name.length < 2) return ack({ error: 'Name must be at least 2 characters' });
-    if (password.length < 4) return ack({ error: 'Password must be at least 4 characters' });
-
-    let user = Object.values(db.users).find((u) => u.name.toLowerCase() === name.toLowerCase());
-    if (user) {
-      if (!checkPassword(user, password)) return ack({ error: 'Wrong password for this name' });
-    } else {
-      const id = newId();
-      user = {
-        id,
-        name,
-        about: 'Hey there! I am using Sahakar Setu Chat.',
-        color: COLORS[Object.keys(db.users).length % COLORS.length],
-        lastSeen: Date.now(),
-        ...hashPassword(password),
-      };
-      db.users[id] = user;
-      io.emit('user:new', publicUser(user));
-    }
-    const token = crypto.randomBytes(24).toString('hex');
-    db.sessions[token] = user.id;
-    save();
-    attach(user.id, (data) => ack({ ...data, token }));
-  });
-
-  socket.on('auth:resume', ({ token } = {}, ack = () => {}) => {
-    const userId = db.sessions[token];
-    if (!userId || !db.users[userId]) return ack({ error: 'Session expired' });
-    attach(userId, ack);
-  });
-
-  socket.on('auth:logout', ({ token } = {}) => {
-    delete db.sessions[token];
-    save();
-    socket.disconnect(true);
+  save();
+  broadcastPresence(me);
+  socket.emit('bootstrap', {
+    me: publicUser(db.users[me]),
+    users: Object.values(db.users).map(publicUser),
+    chats: userChats(me),
   });
 
   socket.on('profile:update', ({ about } = {}, ack = () => {}) => {
@@ -273,7 +420,7 @@ io.on('connection', (socket) => {
   socket.on('chat:open', ({ peerId, chatId } = {}, ack = () => {}) => {
     if (!me) return ack({ error: 'Not logged in' });
     if (peerId) {
-      if (!db.users[peerId]) return ack({ error: 'Unknown user' });
+      if (!isUser(peerId)) return ack({ error: 'Unknown user' });
       chatId = dmId(me, peerId);
     }
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
@@ -284,7 +431,7 @@ io.on('connection', (socket) => {
     if (!me) return ack({ error: 'Not logged in' });
     name = String(name || '').trim().slice(0, 48);
     if (!name) return ack({ error: 'Group needs a name' });
-    const ids = [...new Set([me, ...(Array.isArray(members) ? members : [])])].filter((id) => db.users[id]);
+    const ids = [...new Set([me, ...(Array.isArray(members) ? members : [])])].filter(isUser);
     if (ids.length < 2) return ack({ error: 'Pick at least one other member' });
     const id = 'group:' + newId();
     db.groups[id] = { id, name, members: ids, createdBy: me, color: COLORS[Math.floor(Math.random() * COLORS.length)] };
@@ -295,7 +442,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('group:leave', ({ chatId } = {}, ack = () => {}) => {
-    const g = db.groups[chatId];
+    const g = Object.hasOwn(db.groups, String(chatId)) && db.groups[chatId];
     if (!me || !g || !g.members.includes(me)) return ack({ error: 'Not a member' });
     addMessage(chatId, { system: true, text: `${db.users[me].name} left` });
     g.members = g.members.filter((id) => id !== me);
@@ -307,12 +454,14 @@ io.on('connection', (socket) => {
 
   socket.on('message:send', ({ chatId, peerId, text, file, replyTo } = {}, ack = () => {}) => {
     if (!me) return ack({ error: 'Not logged in' });
-    if (peerId && db.users[peerId]) chatId = dmId(me, peerId);
+    if (isUser(peerId)) chatId = dmId(me, peerId);
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
     text = String(text || '').slice(0, 5000);
     let attachment = null;
-    if (file && db.files && db.files[file.id] && db.files[file.id].owner === me) {
-      const f = db.files[file.id];
+    const f = file && Object.hasOwn(db.files, String(file.id)) && db.files[file.id];
+    if (f && f.owner === me) {
+      f.chats = f.chats || [];
+      if (!f.chats.includes(chatId)) f.chats.push(chatId);
       attachment = { id: f.id, name: f.name, size: f.size, mime: f.mime, url: '/uploads/' + f.id };
     }
     if (!text.trim() && !attachment) return ack({ error: 'Empty message' });
@@ -410,12 +559,12 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
 }
 
 server.listen(PORT, () => {
-  console.log(`\n  Sahakar Setu Chat is running!\n`);
+  console.log(`\n  ${APP_NAME} is running!\n`);
   console.log(`  On this PC:        http://localhost:${PORT}`);
   for (const iface of Object.values(os.networkInterfaces()).flat()) {
     if (iface && iface.family === 'IPv4' && !iface.internal) {
       console.log(`  On your network:   http://${iface.address}:${PORT}`);
     }
   }
-  console.log('');
+  console.log('\n  To use it from any network, see "Use it from anywhere" in README.md\n');
 });

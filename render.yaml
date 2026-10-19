@@ -1,0 +1,21 @@
+# One-click cloud hosting on Render (https://render.com): New > Blueprint > pick this repo.
+# The disk keeps accounts, messages and shared files across restarts.
+services:
+  - type: web
+    name: coop-connect
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: node server.js
+    healthCheckPath: /
+    envVars:
+      - key: DATA_DIR
+        value: /var/data/db
+      - key: UPLOAD_DIR
+        value: /var/data/uploads
+      - key: TRUST_PROXY
+        value: "1"
+    disk:
+      name: coop-connect-data
+      mountPath: /var/data
+      sizeGB: 5

@@ -1,7 +1,7 @@
 {
-  "name": "sahakar-setu-dccb",
+  "name": "coop-connect",
   "version": "1.0.0",
-  "description": "Sahakar Setu Chat - WhatsApp-style chat and file sharing for your PC and office network",
+  "description": "Coop Connect - WhatsApp-style chat and file sharing for your co-op, from any network",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
