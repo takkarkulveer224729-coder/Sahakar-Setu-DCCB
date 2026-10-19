@@ -44,7 +44,7 @@ The first time only:
 4. The window prints your permanent link. Share it with everyone.
 
 After that, just double-click `start-online.bat` whenever you start the PC, and the same
-link works again. Keep the PC on and the *Coop Connect server* window open while people chat.
+link works again. Or let it start by itself (see section 3). Keep the PC on and the *Coop Connect server* window open while people chat.
 
 **Nicer link name:** the address is `https://<pc-name>.<tailnet-name>.ts.net`. In the
 [Tailscale admin console](https://login.tailscale.com/admin/machines), rename the machine
@@ -82,6 +82,26 @@ docker run -d -p 3000:3000 -v coop-data:/data -e TRUST_PROXY=1 --restart unless-
 ```
 
 Put it behind HTTPS (for example Caddy, Nginx or Cloudflare) before sharing the address.
+
+## 3. Start automatically with Windows (recommended for the server PC)
+
+Double-click **`install-autostart.bat`** once and click **Yes** for administrator permission.
+
+It does everything in one go:
+
+1. Coop Connect runs as a background task as soon as Windows starts, even before anyone
+   logs in. There are no windows to keep open, and it restarts itself if it ever stops.
+2. It sets up the permanent Tailscale link (the same steps as `start-online.bat`).
+   Tailscale also starts with Windows, so the link comes back by itself after every restart.
+3. It asks whether to stop the PC from sleeping while plugged in. Say **Y**, because a
+   sleeping PC can't serve the link.
+
+After that, nobody needs to start anything. Just keep the PC switched on and connected to
+the internet.
+
+- **Check what it's doing:** open `logs\server.log` in the Coop Connect folder.
+- **Moved the folder or updated Node.js?** Run `install-autostart.bat` again.
+- **Turn it off:** double-click **`uninstall-autostart.bat`**. Your messages and files are kept.
 
 ## Settings
 
