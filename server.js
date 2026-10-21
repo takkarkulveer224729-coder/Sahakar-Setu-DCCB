@@ -11,6 +11,16 @@ const express = require('express');
 const multer = require('multer');
 const { Server } = require('socket.io');
 
+// Optional settings file next to server.js (KEY=value per line), so settings
+// also apply when Coop Connect runs as a Windows startup task.
+const SETTINGS_FILE = path.join(__dirname, 'settings.env');
+if (fs.existsSync(SETTINGS_FILE)) {
+  for (const line of fs.readFileSync(SETTINGS_FILE, 'utf8').split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
+  }
+}
+
 const APP_NAME = 'Coop Connect';
 const PORT = Number(process.env.PORT) || 3000;
 const DATA_DIR = path.resolve(process.env.DATA_DIR || path.join(__dirname, 'data'));
@@ -20,6 +30,18 @@ const MAX_UPLOAD_MB = Number(process.env.MAX_UPLOAD_MB) || 100;
 const SESSION_DAYS = 30;
 const COOKIE = 'cc_session';
 const USERNAME_RE = /^[a-z0-9._]{3,20}$/;
+const RING_TIMEOUT_MS = 45000;
+
+// Calls go directly between browsers (WebRTC). STUN lets them find each other; a TURN
+// relay is only needed on strict networks (some mobile data / office firewalls).
+const ICE_SERVERS = [{ urls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',') }];
+if (process.env.TURN_URLS) {
+  ICE_SERVERS.push({
+    urls: process.env.TURN_URLS.split(','),
+    username: process.env.TURN_USERNAME || '',
+    credential: process.env.TURN_CREDENTIAL || '',
+  });
+}
 const INLINE_TYPES = /^(image\/(png|jpe?g|gif|webp|bmp)|video\/(mp4|webm|ogg)|audio\/(mpeg|ogg|wav|webm|mp4|x-m4a)|application\/pdf)$/;
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -419,6 +441,7 @@ io.on('connection', (socket) => {
     me: publicUser(db.users[me]),
     users: Object.values(db.users).map(publicUser),
     chats: userChats(me),
+    iceServers: ICE_SERVERS,
   });
 
   socket.on('profile:update', ({ about } = {}, ack = () => {}) => {
@@ -564,7 +587,62 @@ io.on('connection', (socket) => {
     }
   });
 
+  // ---------- Voice & video calls (one-to-one) ----------
+  // The server only passes connection details between the two browsers;
+  // the audio/video itself flows directly between them.
+
+  socket.on('call:start', ({ peerId, kind } = {}, ack = () => {}) => {
+    if (!isUser(peerId) || peerId === me) return ack({ error: 'You cannot call this person' });
+    kind = kind === 'video' ? 'video' : 'voice';
+    const name = db.users[peerId].name;
+    const chatId = dmId(me, peerId);
+    if (userInCall(me)) return ack({ error: 'You are already in a call' });
+    if (!online.has(peerId) || userInCall(peerId)) {
+      addMessage(chatId, { from: me, call: { kind, status: 'missed', duration: 0 } });
+      return ack({ error: online.has(peerId) ? `${name} is on another call` : `${name} is not online right now. They will see a missed call.` });
+    }
+    const call = { id: newId(), from: me, to: peerId, kind, fromSocket: socket.id, toSocket: null, startedAt: null };
+    call.timer = setTimeout(() => finishCall(call, 'missed'), RING_TIMEOUT_MS);
+    calls.set(call.id, call);
+    emitToUser(peerId, 'call:incoming', { callId: call.id, from: me, kind });
+    ack({ ok: true, callId: call.id });
+  });
+
+  socket.on('call:accept', ({ callId } = {}, ack = () => {}) => {
+    const call = calls.get(callId);
+    if (!call || call.to !== me || call.toSocket) return ack({ error: 'This call has ended' });
+    call.toSocket = socket.id;
+    call.startedAt = Date.now();
+    clearTimeout(call.timer);
+    io.to(call.fromSocket).emit('call:accepted', { callId });
+    // Stop it ringing on the person's other devices.
+    for (const sid of online.get(me) || []) {
+      if (sid !== socket.id) io.to(sid).emit('call:ended', { callId, status: 'answered-elsewhere' });
+    }
+    ack({ ok: true });
+  });
+
+  socket.on('call:decline', ({ callId } = {}) => {
+    const call = calls.get(callId);
+    if (call && call.to === me && !call.toSocket) finishCall(call, 'declined');
+  });
+
+  socket.on('call:end', ({ callId } = {}) => {
+    const call = calls.get(callId);
+    if (call && (call.fromSocket === socket.id || call.toSocket === socket.id)) finishCall(call, 'missed');
+  });
+
+  socket.on('call:signal', ({ callId, data } = {}) => {
+    const call = calls.get(callId);
+    if (!call || !call.toSocket || !data || typeof data !== 'object') return;
+    const target = socket.id === call.fromSocket ? call.toSocket : socket.id === call.toSocket ? call.fromSocket : null;
+    if (target) io.to(target).emit('call:signal', { callId, data });
+  });
+
   socket.on('disconnect', () => {
+    for (const call of [...calls.values()]) {
+      if (call.fromSocket === socket.id || call.toSocket === socket.id) finishCall(call, 'missed');
+    }
     if (!me || !online.has(me)) return;
     const set = online.get(me);
     set.delete(socket.id);
@@ -584,6 +662,29 @@ function updateStatus(chatId, m) {
   return s;
 }
 
+const calls = new Map(); // callId -> active or ringing call
+
+function userInCall(userId) {
+  for (const c of calls.values()) if (c.from === userId || c.to === userId) return c;
+  return null;
+}
+
+// End a call on every device of both people and record it in their chat.
+function finishCall(call, status) {
+  if (!calls.delete(call.id)) return;
+  clearTimeout(call.timer);
+  const answered = !!call.startedAt;
+  const duration = answered ? Math.round((Date.now() - call.startedAt) / 1000) : 0;
+  const finalStatus = answered ? 'completed' : status;
+  emitToUser(call.from, 'call:ended', { callId: call.id, status: finalStatus });
+  emitToUser(call.to, 'call:ended', { callId: call.id, status: finalStatus });
+  addMessage(dmId(call.from, call.to), {
+    from: call.from,
+    call: { kind: call.kind, status: finalStatus, duration },
+    readBy: finalStatus === 'missed' ? [] : [call.to],
+  });
+}
+
 function removeFile(fileId) {
   if (!Object.hasOwn(db.files, fileId)) return;
   delete db.files[fileId];
@@ -598,7 +699,7 @@ function statusOf(chatId, m) {
   return { chatId, messageId: m.id, status };
 }
 
-function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false }) {
+function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, readBy = [] }) {
   const members = chatMembers(chatId);
   const msg = {
     id: newId(),
@@ -608,9 +709,10 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
     file,
     reply,
     system,
+    call,
     time: Date.now(),
-    deliveredTo: members.filter((id) => id !== from && online.has(id)),
-    readBy: [],
+    deliveredTo: members.filter((id) => id !== from && (online.has(id) || readBy.includes(id))),
+    readBy,
   };
   updateStatus(chatId, msg);
   (db.messages[chatId] = db.messages[chatId] || []).push(msg);

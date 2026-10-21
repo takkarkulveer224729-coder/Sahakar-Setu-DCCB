@@ -11,6 +11,7 @@ network: office LAN, home Wi-Fi or mobile data.
   - You stay logged in for 30 days. You can change your password from your profile, which logs out your other devices
   - Repeated wrong passwords are blocked for 15 minutes
 - **Chats:** one-to-one chats and group chats
+- **Voice & video calls:** one-to-one, with mute, camera on/off, ringing, and call history (missed / declined / duration) in the chat
 - **Sharing:** photos, videos, audio, PDFs, Word/Excel and any other file, up to 100 MB each
   - Send them with the 📎 button, drag & drop or paste (Ctrl+V)
   - A shared file can only be opened by people in the chat it was sent to
@@ -106,7 +107,27 @@ the internet.
 - **Moved the folder or updated Node.js?** Run `install-autostart.bat` again.
 - **Turn it off:** double-click **`uninstall-autostart.bat`**. Your messages and files are kept.
 
+## Voice & video calls
+
+Open a one-to-one chat and click 🎥 (video) or 📞 (voice) at the top. The other person
+sees an incoming call screen with **Accept** / **Decline**. During a call you can mute,
+turn your camera off, and hang up. Every call is noted in the chat ("Missed voice call",
+"Outgoing video call 2:31"…), and you can click it to call back.
+
+- **Calls need the `https://` link** (the Tailscale or cloud address), or `http://localhost`
+  on the server PC itself. Browsers block the camera and microphone on plain `http://192.168…` addresses.
+- **Allow the camera and microphone** when the browser asks the first time.
+- The audio and video go **directly between the two devices**, so they don't load your server PC.
+- **If calls ring but never connect** (common on some mobile-data or office networks), add a
+  relay ("TURN") server. Copy `settings.example.env` to `settings.env`, fill in the
+  `TURN_URLS`, `TURN_USERNAME` and `TURN_CREDENTIAL` from any TURN provider (several have
+  free plans), and restart Coop Connect.
+- Group calls are not supported yet.
+
 ## Settings
+
+Put these in a `settings.env` file next to `server.js` (see `settings.example.env`), or set them as environment variables.
+
 
 | Variable        | Default                          | Meaning                                          |
 | --------------- | -------------------------------- | ------------------------------------------------ |
@@ -114,6 +135,8 @@ the internet.
 | `MAX_UPLOAD_MB` | `100`                            | Largest file you can share                       |
 | `DATA_DIR`      | `./data`                         | Where accounts and messages are saved            |
 | `UPLOAD_DIR`    | `./uploads`                      | Where shared files are saved                     |
+| `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL` | (none) | Relay server for calls on strict networks |
+| `STUN_URLS`     | Google's public STUN servers     | How devices discover each other for calls        |
 | `TRUST_PROXY`   | `loopback, linklocal, uniquelocal` | Proxies to trust for HTTPS/IP (use `1` behind one proxy) |
 
 ## Backing up
