@@ -102,8 +102,8 @@
             <div id="conv-name" class="conv-name"></div>
             <div id="conv-status" class="conv-status"></div>
           </div>
-          <button id="btn-leave" class="icon-btn hidden" title="Leave group">
-            <svg viewBox="0 0 24 24"><path d="M10.09 15.59 11.5 17l5-5-5-5-1.41 1.41L12.67 11H3v2h9.67l-2.58 2.59zM19 3H5a2 2 0 0 0-2 2v4h2V5h14v14H5v-4H3v4a2 2 0 0 0 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z"/></svg>
+          <button id="btn-chat-menu" class="icon-btn" title="Menu">
+            <svg viewBox="0 0 24 24"><path d="M12 7a2 2 0 1 0-.001-4.001A2 2 0 0 0 12 7zm0 2a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 9zm0 6a2 2 0 1 0-.001 3.999A2 2 0 0 0 12 15z"/></svg>
           </button>
         </header>
 
@@ -144,6 +144,15 @@
     <button id="viewer-close" class="viewer-close" title="Close">✕</button>
     <a id="viewer-download" class="viewer-download" title="Download">⬇</a>
     <div id="viewer-content"></div>
+  </div>
+
+  <!-- Confirmation dialog -->
+  <div id="dialog" class="dialog-backdrop hidden">
+    <div class="dialog" role="dialog" aria-modal="true">
+      <div id="dialog-title" class="dialog-title"></div>
+      <div id="dialog-text" class="dialog-text"></div>
+      <div id="dialog-buttons" class="dialog-buttons"></div>
+    </div>
   </div>
 
   <div id="toast" class="toast hidden"></div>

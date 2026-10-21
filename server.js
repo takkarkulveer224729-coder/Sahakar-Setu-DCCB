@@ -27,7 +27,9 @@ fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ---------- Persistence (a simple JSON file) ----------
 
-let db = { users: {}, sessions: {}, groups: {}, messages: {}, files: {} };
+// hidden: userId -> { messageId: 1 } for "delete for me"; clears: "userId|chatId" -> time of "clear chat";
+// removedChats: "userId|chatId" -> 1 when the chat was deleted from that user's list.
+let db = { users: {}, sessions: {}, groups: {}, messages: {}, files: {}, hidden: {}, clears: {}, removedChats: {} };
 if (fs.existsSync(DB_FILE)) {
   try {
     db = { ...db, ...JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) };
@@ -173,11 +175,21 @@ function canAccess(userId, chatId) {
   return chatMembers(chatId).includes(userId);
 }
 
+// Messages a user still sees: not deleted "for me" and not wiped by "clear chat".
+function visibleMessages(chatId, userId) {
+  const hidden = db.hidden[userId] || {};
+  const clearedAt = db.clears[userId + '|' + chatId] || 0;
+  return (db.messages[chatId] || []).filter((m) => m.time > clearedAt && !hidden[m.id]);
+}
+
 function chatSummary(chatId, userId) {
-  const msgs = db.messages[chatId] || [];
+  const msgs = visibleMessages(chatId, userId);
   const last = msgs[msgs.length - 1] || null;
   const unread = msgs.filter((m) => m.from !== userId && !m.readBy.includes(userId) && !m.deleted).length;
-  const base = { id: chatId, last, unread };
+  const key = userId + '|' + chatId;
+  // A cleared (not deleted) chat stays in the list even with no messages.
+  const kept = !!db.clears[key] && !db.removedChats[key];
+  const base = { id: chatId, last, unread, kept };
   if (chatId.startsWith('dm:')) {
     const otherId = chatMembers(chatId).find((id) => id !== userId) || userId;
     return { ...base, type: 'dm', peer: otherId };
@@ -424,7 +436,7 @@ io.on('connection', (socket) => {
       chatId = dmId(me, peerId);
     }
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
-    ack({ ok: true, chat: chatSummary(chatId, me), messages: db.messages[chatId] || [] });
+    ack({ ok: true, chat: chatSummary(chatId, me), messages: visibleMessages(chatId, me) });
   });
 
   socket.on('group:create', ({ name, members } = {}, ack = () => {}) => {
@@ -476,16 +488,55 @@ io.on('connection', (socket) => {
     ack({ ok: true, message: msg });
   });
 
+  // Delete for everyone: only your own messages. The text, file and any quotes of it disappear.
   socket.on('message:delete', ({ chatId, messageId } = {}, ack = () => {}) => {
     if (!me || !canAccess(me, chatId)) return ack({ error: 'No access' });
-    const m = (db.messages[chatId] || []).find((x) => x.id === messageId);
-    if (!m || m.from !== me) return ack({ error: 'You can only delete your own messages' });
+    const msgs = db.messages[chatId] || [];
+    const m = msgs.find((x) => x.id === messageId);
+    if (!m || m.from !== me) return ack({ error: 'You can only delete your own messages for everyone' });
+    if (m.deleted) return ack({ ok: true });
+    if (m.file) removeFile(m.file.id);
     m.deleted = true;
     m.text = '';
     m.file = null;
     m.reply = null;
+    const changed = [m];
+    for (const other of msgs) {
+      if (other.reply && other.reply.id === m.id) {
+        other.reply = { id: m.id, from: m.from, text: '🚫 This message was deleted', fileName: null };
+        changed.push(other);
+      }
+    }
     save();
-    emitToChat(chatId, 'message:updated', { chatId, message: m });
+    for (const x of changed) emitToChat(chatId, 'message:updated', { chatId, message: x });
+    for (const uid of chatMembers(chatId)) emitToUser(uid, 'chat:update', chatSummary(chatId, uid));
+    ack({ ok: true });
+  });
+
+  // Delete for me: hides any message (yours or others') on your own devices only.
+  socket.on('message:hide', ({ chatId, messageIds } = {}, ack = () => {}) => {
+    if (!me || !canAccess(me, chatId)) return ack({ error: 'No access' });
+    const ids = new Set((Array.isArray(messageIds) ? messageIds : []).map(String));
+    const hidden = (db.hidden[me] = db.hidden[me] || {});
+    for (const m of db.messages[chatId] || []) if (ids.has(m.id)) hidden[m.id] = 1;
+    save();
+    emitToUser(me, 'message:removed', { chatId, messageIds: [...ids] });
+    emitToUser(me, 'chat:update', chatSummary(chatId, me));
+    ack({ ok: true });
+  });
+
+  // Clear chat: empties the conversation for you only. Others keep their copy.
+  // With remove: true it is "Delete chat" and the chat also leaves your list until a new message comes.
+  socket.on('chat:clear', ({ chatId, remove } = {}, ack = () => {}) => {
+    if (!me || !canAccess(me, chatId)) return ack({ error: 'No access' });
+    const msgs = db.messages[chatId] || [];
+    const key = me + '|' + chatId;
+    db.clears[key] = Math.max(Date.now(), ...msgs.map((m) => m.time));
+    if (remove) db.removedChats[key] = 1;
+    else delete db.removedChats[key];
+    save();
+    emitToUser(me, 'chat:cleared', { chatId });
+    emitToUser(me, 'chat:update', chatSummary(chatId, me));
     ack({ ok: true });
   });
 
@@ -531,6 +582,12 @@ function updateStatus(chatId, m) {
   const s = statusOf(chatId, m);
   m.status = s.status;
   return s;
+}
+
+function removeFile(fileId) {
+  if (!Object.hasOwn(db.files, fileId)) return;
+  delete db.files[fileId];
+  fs.unlink(path.join(UPLOAD_DIR, fileId), () => {});
 }
 
 function statusOf(chatId, m) {

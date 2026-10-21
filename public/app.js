@@ -293,7 +293,7 @@
     const list = $('#chat-list');
     list.replaceChildren();
     const chats = [...state.chats.values()]
-      .filter((c) => c.last || c.type === 'group')
+      .filter((c) => c.last || c.kept || c.type === 'group')
       .sort((a, b) => ((b.last && b.last.time) || 0) - ((a.last && a.last.time) || 0));
 
     const matching = chats.filter((c) => !q || chatTitle(c).toLowerCase().includes(q));
@@ -571,14 +571,8 @@
       const u = state.users.get(c.peer);
       status.textContent = u && u.id !== state.me.id ? lastSeen(u) : 'Message yourself';
     }
-    $('#btn-leave').classList.toggle('hidden', c.type !== 'group');
   }
 
-  $('#btn-leave').addEventListener('click', () => {
-    const c = state.current;
-    if (!c || !confirm(`Leave "${c.name}"?`)) return;
-    socket.emit('group:leave', { chatId: c.id }, (res) => res.error && toast(res.error));
-  });
 
   function renderMessages() {
     const box = $('#messages');
@@ -617,8 +611,8 @@
       }
       if (m.file) node.append(fileNode(m.file));
       if (m.text) node.append(el('span', { class: 'text' }, linkify(m.text)));
-      node.append(el('button', { class: 'menu-btn', title: 'Message options', onclick: (e) => showMsgMenu(e, m) }, '▼'));
     }
+    node.append(el('button', { class: 'menu-btn', title: 'Message options', onclick: (e) => showMsgMenu(e, m) }, '▼'));
 
     node.append(el('span', { class: 'meta' }, fmtTime(m.time), mine && !m.deleted ? tick(m.status) : null));
     node.addEventListener('dblclick', () => !m.deleted && startReply(m));
@@ -661,26 +655,83 @@
   function closeMenu() { if (openMenu) { openMenu.remove(); openMenu = null; } }
   document.addEventListener('click', (e) => { if (openMenu && !openMenu.contains(e.target)) closeMenu(); });
 
-  function showMsgMenu(e, m) {
-    e.stopPropagation();
+  function popupMenu(anchor, items) {
     closeMenu();
-    const items = [
-      el('button', { onclick: () => { closeMenu(); startReply(m); } }, 'Reply'),
-      m.text ? el('button', { onclick: () => { closeMenu(); navigator.clipboard.writeText(m.text).then(() => toast('Copied')); } }, 'Copy text') : null,
-      m.file ? el('button', { onclick: () => { closeMenu(); window.open(m.file.url + '?download=1'); } }, 'Download') : null,
-      m.from === state.me.id ? el('button', { onclick: () => {
-        closeMenu();
-        if (confirm('Delete this message for everyone?')) socket.emit('message:delete', { chatId: m.chatId, messageId: m.id }, (r) => r.error && toast(r.error));
-      } }, 'Delete for everyone') : null,
-    ];
-    openMenu = el('div', { class: 'msg-menu' }, items);
+    openMenu = el('div', { class: 'msg-menu' }, items.filter(Boolean).map(([label, action, cls]) =>
+      el('button', { class: cls, onclick: () => { closeMenu(); action(); } }, label)));
     document.body.append(openMenu);
-    const r = e.target.getBoundingClientRect();
+    const r = anchor.getBoundingClientRect();
     const w = openMenu.offsetWidth;
     const h = openMenu.offsetHeight;
-    openMenu.style.left = Math.min(r.left, window.innerWidth - w - 8) + 'px';
+    openMenu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
     openMenu.style.top = (r.bottom + h > window.innerHeight ? r.top - h : r.bottom) + 'px';
   }
+
+  function showMsgMenu(e, m) {
+    e.stopPropagation();
+    popupMenu(e.currentTarget, [
+      !m.deleted && ['Reply', () => startReply(m)],
+      !m.deleted && m.text && ['Copy text', () => navigator.clipboard.writeText(m.text).then(() => toast('Copied'))],
+      !m.deleted && m.file && ['Download', () => window.open(m.file.url + '?download=1')],
+      ['Delete', () => confirmDeleteMessage(m), 'danger'],
+    ]);
+  }
+
+  // WhatsApp-style "Delete message?" choice.
+  function confirmDeleteMessage(m) {
+    const mine = m.from === state.me.id && !m.deleted;
+    showDialog({
+      title: 'Delete message?',
+      text: mine ? 'You can delete this message for everyone or just for yourself.' : 'This message will be removed from this device and your other devices only.',
+      buttons: [
+        mine && ['Delete for everyone', () => socket.emit('message:delete', { chatId: m.chatId, messageId: m.id }, (r) => r.error && toast(r.error)), 'primary'],
+        ['Delete for me', () => socket.emit('message:hide', { chatId: m.chatId, messageIds: [m.id] }, (r) => r.error && toast(r.error)), mine ? '' : 'primary'],
+        ['Cancel', () => {}],
+      ],
+    });
+  }
+
+  function showDialog({ title, text, buttons }) {
+    $('#dialog-title').textContent = title;
+    $('#dialog-text').textContent = text || '';
+    $('#dialog-buttons').replaceChildren(...buttons.filter(Boolean).map(([label, action, cls]) =>
+      el('button', { class: 'dialog-btn ' + (cls || ''), onclick: () => { closeDialog(); action(); } }, label)));
+    $('#dialog').classList.remove('hidden');
+    $('#dialog-buttons button').focus();
+  }
+  const closeDialog = () => $('#dialog').classList.add('hidden');
+  $('#dialog').addEventListener('click', (e) => { if (e.target.id === 'dialog') closeDialog(); });
+
+  // Chat menu (⋮): info, clear chat, delete chat / exit group.
+  $('#btn-chat-menu').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const c = state.current;
+    if (!c) return;
+    const name = chatTitle(c);
+    const clear = (after, remove = false) => socket.emit('chat:clear', { chatId: c.id, remove }, (r) => {
+      if (r.error) return toast(r.error);
+      if (after) after();
+    });
+    popupMenu(e.currentTarget, [
+      [c.type === 'group' ? 'Group info' : 'Contact info', showChatInfo],
+      ['Clear chat', () => showDialog({
+        title: `Clear this chat?`,
+        text: `All messages in "${name}" will be removed for you only. Others still see them.`,
+        buttons: [['Clear chat', () => clear(() => toast('Chat cleared')), 'primary'], ['Cancel', () => {}]],
+      })],
+      c.type === 'group'
+        ? ['Exit group', () => showDialog({
+          title: `Exit "${c.name}"?`,
+          text: 'You will stop getting messages from this group, and it will be removed from your chats.',
+          buttons: [['Exit group', () => clear(() => socket.emit('group:leave', { chatId: c.id }, (r) => r.error && toast(r.error))), 'primary'], ['Cancel', () => {}]],
+        }), 'danger']
+        : ['Delete chat', () => showDialog({
+          title: `Delete chat with ${name}?`,
+          text: 'Messages will be removed for you only. The chat comes back if a new message arrives.',
+          buttons: [['Delete chat', () => clear(() => { closeChatView(); renderChatList(); toast('Chat deleted'); }, true), 'primary'], ['Cancel', () => {}]],
+        }), 'danger'],
+    ]);
+  });
 
   // ---------- Reply ----------
 
@@ -859,7 +910,7 @@
   const closeViewer = () => { $('#viewer').classList.add('hidden'); $('#viewer-content').replaceChildren(); };
   $('#viewer-close').addEventListener('click', closeViewer);
   $('#viewer').addEventListener('click', (e) => { if (e.target.id === 'viewer') closeViewer(); });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeViewer(); closePanel(); closeMenu(); } });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closeViewer(); closePanel(); closeMenu(); closeDialog(); } });
 
   // ---------- Realtime events ----------
 
@@ -930,9 +981,27 @@
         if (node) node.replaceWith(messageNode(message, prev && !prev.system && fmtDay(prev.time) === fmtDay(message.time) ? prev : null));
       }
     }
-    const c = state.chats.get(chatId);
-    if (c && c.last && c.last.id === message.id) { c.last = message; renderChatList(); }
   });
+
+  socket.on('message:removed', ({ chatId, messageIds }) => {
+    if (!state.current || state.current.id !== chatId) return;
+    const gone = new Set(messageIds);
+    state.messages = state.messages.filter((m) => !gone.has(m.id));
+    renderMessagesKeepScroll();
+  });
+
+  socket.on('chat:cleared', ({ chatId }) => {
+    if (!state.current || state.current.id !== chatId) return;
+    state.messages = [];
+    renderMessages();
+  });
+
+  function renderMessagesKeepScroll() {
+    const box = $('#messages');
+    const top = box.scrollTop;
+    renderMessages();
+    box.scrollTop = top;
+  }
 
   function clearTyping(chatId, userId) {
     const map = state.typing.get(chatId);

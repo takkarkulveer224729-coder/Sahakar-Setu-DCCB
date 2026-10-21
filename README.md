@@ -15,7 +15,9 @@ network: office LAN, home Wi-Fi or mobile data.
   - Send them with the 📎 button, drag & drop or paste (Ctrl+V)
   - A shared file can only be opened by people in the chat it was sent to
 - **Status:** sent / delivered / read ticks, online and "last seen", and "typing…"
-- **Messages:** reply, copy and delete for everyone, plus an emoji picker, clickable links, unread counts, search and desktop notifications
+- **Messages:** reply, copy, **delete for me** (any message) and **delete for everyone** (your own; removes the shared file too)
+- **Chat menu (⋮):** contact/group info, **clear chat** (empties it for you only), **delete chat**, exit group
+- **Extras:** an emoji picker, clickable links, unread counts, search and desktop notifications
 - **About (status):** WhatsApp-style moods like 🟢 Available, 🤝 In a meeting, 🚜 On field visit, or your own text with emojis. Tap a chat's name to see someone's About
 - **Look:** light and dark theme, and a layout that also works on phones
 
