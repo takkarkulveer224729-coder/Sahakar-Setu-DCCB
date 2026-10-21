@@ -15,6 +15,10 @@ network: office LAN, home Wi-Fi or mobile data.
 - **Sharing:** photos, videos, audio, PDFs, Word/Excel and any other file, up to 100 MB each
   - Send them with the 📎 button, drag & drop or paste (Ctrl+V)
   - A shared file can only be opened by people in the chat it was sent to
+- **📸 WebSnap:** take a live photo with the PC's webcam (or phone camera) right inside the chat
+  - Live preview, 3-second timer, switch camera, retake, add a caption, send
+  - The photo is marked "📸 WebSnap" so everyone knows it was taken just now, not picked from old files
+  - Like calls, it needs the `https://` link and permission to use the camera
 - **Status:** sent / delivered / read ticks, online and "last seen", and "typing…"
 - **Messages:** reply, copy, **delete for me** (any message) and **delete for everyone** (your own; removes the shared file too)
 - **Chat menu (⋮):** contact/group info, **clear chat** (empties it for you only), **delete chat**, exit group

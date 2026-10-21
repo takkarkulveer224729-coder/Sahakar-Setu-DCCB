@@ -487,7 +487,7 @@ io.on('connection', (socket) => {
     ack({ ok: true });
   });
 
-  socket.on('message:send', ({ chatId, peerId, text, file, replyTo } = {}, ack = () => {}) => {
+  socket.on('message:send', ({ chatId, peerId, text, file, replyTo, websnap } = {}, ack = () => {}) => {
     if (!me) return ack({ error: 'Not logged in' });
     if (isUser(peerId)) chatId = dmId(me, peerId);
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
@@ -507,7 +507,9 @@ io.on('connection', (socket) => {
         reply = { id: orig.id, from: orig.from, text: orig.text.slice(0, 200), fileName: orig.file && orig.file.name };
       }
     }
-    const msg = addMessage(chatId, { from: me, text, file: attachment, reply });
+    // WebSnap = a photo taken live with the sender's camera inside Coop Connect.
+    websnap = !!websnap && !!attachment && attachment.mime.startsWith('image/');
+    const msg = addMessage(chatId, { from: me, text, file: attachment, reply, websnap });
     ack({ ok: true, message: msg });
   });
 
@@ -522,6 +524,7 @@ io.on('connection', (socket) => {
     m.deleted = true;
     m.text = '';
     m.file = null;
+    m.websnap = false;
     m.reply = null;
     const changed = [m];
     for (const other of msgs) {
@@ -699,7 +702,7 @@ function statusOf(chatId, m) {
   return { chatId, messageId: m.id, status };
 }
 
-function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, readBy = [] }) {
+function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, websnap = false, readBy = [] }) {
   const members = chatMembers(chatId);
   const msg = {
     id: newId(),
@@ -710,6 +713,7 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
     reply,
     system,
     call,
+    websnap,
     time: Date.now(),
     deliveredTo: members.filter((id) => id !== from && (online.has(id) || readBy.includes(id))),
     readBy,

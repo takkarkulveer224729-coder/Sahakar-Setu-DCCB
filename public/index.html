@@ -135,6 +135,9 @@
           <button id="btn-attach" class="icon-btn" title="Attach files">
             <svg viewBox="0 0 24 24"><path d="M1.816 15.556v.002c0 1.502.584 2.912 1.646 3.972s2.472 1.647 3.974 1.647a5.58 5.58 0 0 0 3.972-1.645l9.547-9.548c.769-.768 1.147-1.767 1.058-2.817-.079-.968-.548-1.927-1.319-2.698-1.594-1.592-4.068-1.711-5.517-.262l-7.916 7.915c-.881.881-.792 2.25.214 3.261.959.958 2.423 1.053 3.263.215l5.511-5.512c.28-.28.267-.722.053-.936l-.244-.244c-.191-.191-.567-.349-.957.04l-5.506 5.506c-.18.18-.635.127-.976-.214-.098-.097-.576-.613-.213-.973l7.915-7.917c.818-.817 2.267-.699 3.23.262.5.501.802 1.1.849 1.685.051.573-.156 1.111-.589 1.543l-9.547 9.549a3.97 3.97 0 0 1-2.829 1.171 3.975 3.975 0 0 1-2.83-1.173 3.973 3.973 0 0 1-1.172-2.828c0-1.071.415-2.076 1.172-2.83l7.209-7.211c.157-.157.264-.579.028-.814L11.5 4.36a.572.572 0 0 0-.834.018l-7.205 7.207a5.577 5.577 0 0 0-1.645 3.971z"/></svg>
           </button>
+          <button id="btn-websnap" class="icon-btn" title="WebSnap – take a photo with your camera">
+            <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+          </button>
           <input id="file-input" type="file" multiple hidden>
           <textarea id="msg-input" rows="1" placeholder="Type a message"></textarea>
           <button id="btn-send" class="icon-btn send" title="Send">
@@ -182,6 +185,38 @@
       <button id="call-accept" class="call-btn accept" title="Accept">
         <svg viewBox="0 0 24 24"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
       </button>
+    </div>
+  </div>
+
+  <!-- WebSnap: take a live photo with the PC camera -->
+  <div id="websnap" class="websnap hidden">
+    <div class="ws-box">
+      <header class="ws-header">
+        <button id="ws-close" class="icon-btn" title="Close">✕</button>
+        <div class="ws-title">📸 WebSnap</div>
+        <div id="ws-to" class="ws-to"></div>
+      </header>
+      <div class="ws-stage">
+        <video id="ws-video" autoplay playsinline muted></video>
+        <img id="ws-photo" class="hidden" alt="Your WebSnap">
+        <div id="ws-flash" class="ws-flash"></div>
+        <div id="ws-countdown" class="ws-countdown hidden"></div>
+        <div id="ws-message" class="ws-message hidden"></div>
+      </div>
+      <div id="ws-live" class="ws-controls">
+        <button id="ws-timer" class="ws-small" title="3-second timer">⏱ Off</button>
+        <button id="ws-shutter" class="ws-shutter" title="Take photo (Space)"></button>
+        <button id="ws-switch" class="ws-small" title="Switch camera">
+          <svg viewBox="0 0 24 24"><path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 11.5V13H9v2.5L5.5 12 9 8.5V11h6V8.5l3.5 3.5-3.5 3.5z"/></svg>
+        </button>
+      </div>
+      <div id="ws-review" class="ws-controls ws-review hidden">
+        <button id="ws-retake" class="ws-small wide">↺ Retake</button>
+        <input id="ws-caption" placeholder="Add a caption…" maxlength="1000">
+        <button id="ws-send" class="ws-send" title="Send (Enter)">
+          <svg viewBox="0 0 24 24"><path d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>
+        </button>
+      </div>
     </div>
   </div>
 

@@ -147,6 +147,7 @@
     if (!m) return '';
     if (m.deleted) return '🚫 This message was deleted';
     if (m.call) return callLabel(m);
+    if (m.websnap && m.file) return `📸 WebSnap${m.text ? ': ' + m.text : ''}`;
     if (m.file) {
       const icon = m.file.mime.startsWith('image/') ? '📷' : m.file.mime.startsWith('video/') ? '🎥' : m.file.mime.startsWith('audio/') ? '🎵' : '📄';
       return `${icon} ${m.text || m.file.name}`;
@@ -641,6 +642,7 @@
           el('div', { class: 'q-text' }, m.reply.text || (m.reply.fileName ? '📎 ' + m.reply.fileName : '')),
         ));
       }
+      if (m.websnap && m.file) node.append(el('div', { class: 'websnap-tag', title: 'Photo taken live with WebSnap' }, '📸 WebSnap'));
       if (m.file) node.append(fileNode(m.file));
       if (m.text) node.append(el('span', { class: 'text' }, linkify(m.text)));
     }
@@ -1225,6 +1227,180 @@
 
   // Leaving or reloading the page ends the call cleanly.
   window.addEventListener('beforeunload', () => { if (call.id) socket.emit('call:end', { callId: call.id }); });
+
+  // ---------- WebSnap: take a live photo with the PC camera and send it ----------
+
+  const snap = { stream: null, chatId: null, deviceIds: [], deviceIndex: 0, blob: null, timer: false, busy: false };
+
+  async function startSnapCamera() {
+    stopSnapCamera();
+    const msg = $('#ws-message');
+    msg.classList.add('hidden');
+    const deviceId = snap.deviceIds[snap.deviceIndex];
+    try {
+      snap.stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: deviceId ? { deviceId: { exact: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
+          : { width: { ideal: 1280 }, height: { ideal: 720 } },
+      });
+    } catch (err) {
+      msg.textContent = err && err.name === 'NotAllowedError'
+        ? 'Camera access was blocked. Click the camera icon in the address bar to allow it, then try again.'
+        : 'No camera found, or it is being used by another app.';
+      msg.classList.remove('hidden');
+      $('#ws-shutter').disabled = true;
+      return;
+    }
+    $('#ws-shutter').disabled = false;
+    const v = $('#ws-video');
+    v.srcObject = snap.stream;
+    v.play().catch(() => {});
+    // Mirror the preview for front/web cameras, like a mirror.
+    const facing = snap.stream.getVideoTracks()[0].getSettings().facingMode;
+    v.classList.toggle('mirror', facing !== 'environment');
+    // Now that permission is granted, device labels/ids are available.
+    const cams = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    snap.deviceIds = cams.map((d) => d.deviceId);
+    const current = snap.stream.getVideoTracks()[0].getSettings().deviceId;
+    if (current && snap.deviceIds.includes(current)) snap.deviceIndex = snap.deviceIds.indexOf(current);
+    $('#ws-switch').classList.toggle('hidden', cams.length < 2);
+  }
+
+  function stopSnapCamera() {
+    if (snap.stream) for (const t of snap.stream.getTracks()) t.stop();
+    snap.stream = null;
+    $('#ws-video').srcObject = null;
+  }
+
+  function showSnapLive() {
+    snap.blob = null;
+    $('#ws-photo').classList.add('hidden');
+    $('#ws-video').classList.remove('hidden');
+    $('#ws-live').classList.remove('hidden');
+    $('#ws-review').classList.add('hidden');
+  }
+
+  async function openWebSnap() {
+    if (!state.current) return;
+    if (call.id || call.role) return toast('Finish your call first');
+    if (!window.isSecureContext || !navigator.mediaDevices) {
+      return toast('WebSnap needs the secure https:// link (or http://localhost on the server PC).');
+    }
+    snap.chatId = state.current.id;
+    $('#ws-to').textContent = 'to ' + chatTitle(state.current);
+    $('#ws-caption').value = '';
+    showSnapLive();
+    $('#websnap').classList.remove('hidden');
+    await startSnapCamera();
+  }
+
+  function closeWebSnap() {
+    stopSnapCamera();
+    clearInterval(snap.countdown);
+    $('#ws-countdown').classList.add('hidden');
+    $('#websnap').classList.add('hidden');
+    snap.blob = null;
+    snap.busy = false;
+  }
+
+  function takeSnap() {
+    const v = $('#ws-video');
+    if (!snap.stream || !v.videoWidth || snap.busy) return;
+    if (snap.timer) {
+      snap.busy = true;
+      let n = 3;
+      const cd = $('#ws-countdown');
+      cd.textContent = n;
+      cd.classList.remove('hidden');
+      snap.countdown = setInterval(() => {
+        n -= 1;
+        if (n > 0) { cd.textContent = n; return; }
+        clearInterval(snap.countdown);
+        cd.classList.add('hidden');
+        snap.busy = false;
+        captureFrame();
+      }, 1000);
+    } else {
+      captureFrame();
+    }
+  }
+
+  function captureFrame() {
+    const v = $('#ws-video');
+    if (!snap.stream || !v.videoWidth) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = v.videoWidth;
+    canvas.height = v.videoHeight;
+    // The preview is mirrored like a mirror, but the photo is saved the right way
+    // round so text on documents, notices and registers stays readable.
+    canvas.getContext('2d').drawImage(v, 0, 0, canvas.width, canvas.height);
+    const flash = $('#ws-flash');
+    flash.classList.remove('go');
+    void flash.offsetWidth;
+    flash.classList.add('go');
+    beep();
+    canvas.toBlob((blob) => {
+      if (!blob) return toast('Could not take the photo, please try again');
+      snap.blob = blob;
+      const img = $('#ws-photo');
+      if (img.src) URL.revokeObjectURL(img.src);
+      img.src = URL.createObjectURL(blob);
+      img.classList.remove('hidden');
+      $('#ws-video').classList.add('hidden');
+      $('#ws-live').classList.add('hidden');
+      $('#ws-review').classList.remove('hidden');
+      $('#ws-caption').focus();
+    }, 'image/jpeg', 0.9);
+  }
+
+  async function sendSnap() {
+    if (!snap.blob || snap.busy) return;
+    snap.busy = true;
+    const btn = $('#ws-send');
+    btn.disabled = true;
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const name = `WebSnap-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.jpg`;
+    const file = new File([snap.blob], name, { type: 'image/jpeg' });
+    const chatId = snap.chatId;
+    const caption = $('#ws-caption').value.trim();
+    try {
+      const info = await uploadOne(file);
+      socket.emit('message:send', { chatId, text: caption, file: { id: info.id }, websnap: true }, (res) => {
+        if (res.error) toast(res.error);
+      });
+      closeWebSnap();
+    } catch (err) {
+      toast('Could not send WebSnap: ' + err.message);
+    } finally {
+      snap.busy = false;
+      btn.disabled = false;
+    }
+  }
+
+  $('#btn-websnap').addEventListener('click', openWebSnap);
+  $('#ws-close').addEventListener('click', closeWebSnap);
+  $('#ws-shutter').addEventListener('click', takeSnap);
+  $('#ws-retake').addEventListener('click', showSnapLive);
+  $('#ws-send').addEventListener('click', sendSnap);
+  $('#ws-timer').addEventListener('click', () => {
+    snap.timer = !snap.timer;
+    $('#ws-timer').textContent = snap.timer ? '⏱ 3s' : '⏱ Off';
+    $('#ws-timer').classList.toggle('on', snap.timer);
+  });
+  $('#ws-switch').addEventListener('click', async () => {
+    if (snap.deviceIds.length < 2) return;
+    snap.deviceIndex = (snap.deviceIndex + 1) % snap.deviceIds.length;
+    await startSnapCamera();
+  });
+  $('#ws-caption').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); sendSnap(); }
+  });
+  document.addEventListener('keydown', (e) => {
+    if ($('#websnap').classList.contains('hidden')) return;
+    if (e.key === 'Escape') closeWebSnap();
+    else if (e.key === ' ' && !$('#ws-live').classList.contains('hidden')) { e.preventDefault(); takeSnap(); }
+  });
 
   // ---------- Realtime events ----------
 
