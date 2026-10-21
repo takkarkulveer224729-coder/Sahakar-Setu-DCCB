@@ -358,8 +358,12 @@
     $('#panel-title').textContent = title;
     $('#panel-body').replaceChildren(...[content].flat(Infinity).filter(Boolean));
     $('#panel').classList.add('open');
+    $('#app').classList.add('show-panel');
   }
-  const closePanel = () => $('#panel').classList.remove('open');
+  const closePanel = () => {
+    $('#panel').classList.remove('open');
+    $('#app').classList.remove('show-panel');
+  };
   $('#panel-back').addEventListener('click', closePanel);
 
   function sortedUsers() {
@@ -410,8 +414,61 @@
   }
   $('#btn-new-group').addEventListener('click', showNewGroup);
 
+  // WhatsApp-style "About" presets, tuned for co-op staff.
+  const ABOUT_PRESETS = [
+    '🟢 Available', '🔴 Busy', '🏦 At the branch', '🤝 In a meeting', '🚜 On field visit',
+    '📞 Urgent calls only', '🍽️ At lunch', '🏖️ On leave', '😴 Sleeping',
+    '🔋 Battery about to die', '💬 Can\'t talk, Coop Connect only',
+  ];
+  const ABOUT_EMOJIS = ['😊', '🙏', '👍', '🏦', '🌾', '🚜', '📞', '💼', '📚', '🏠', '✈️', '🎉', '❤️', '🔥', '⏳', '🤒'];
+
+  function saveAbout(text, done) {
+    text = text.trim();
+    if (!text) return toast('About can\'t be empty');
+    socket.emit('profile:update', { about: text }, () => {
+      state.me.about = text;
+      toast('About updated');
+      if (done) done();
+    });
+  }
+
+  function aboutEditor() {
+    const box = el('div', { class: 'about-editor' });
+    const render = () => {
+      const input = el('input', { value: state.me.about || '', maxlength: 140, placeholder: 'Write your own…' });
+      const count = el('span', { class: 'about-count' }, `${140 - input.value.length}`);
+      input.addEventListener('input', () => { count.textContent = `${140 - input.value.length}`; });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') saveAbout(input.value, render); });
+      const emojiRow = el('div', { class: 'about-emojis' }, ABOUT_EMOJIS.map((em) => el('button', {
+        type: 'button',
+        title: 'Add ' + em,
+        onclick: () => {
+          const { selectionStart: s, selectionEnd: e } = input;
+          input.value = (input.value.slice(0, s) + em + input.value.slice(e)).slice(0, 140);
+          input.selectionStart = input.selectionEnd = s + em.length;
+          input.focus();
+          count.textContent = `${140 - input.value.length}`;
+        },
+      }, em)));
+      box.replaceChildren(
+        el('div', { class: 'field' },
+          el('label', {}, 'About'),
+          el('div', { class: 'about-input' }, input, count),
+          emojiRow,
+        ),
+        el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: () => saveAbout(input.value, render) }, 'Save About')),
+        el('div', { class: 'section-label' }, 'Select About'),
+        ...ABOUT_PRESETS.map((p) => el('div', {
+          class: 'about-preset' + (p === state.me.about ? ' selected' : ''),
+          onclick: () => saveAbout(p, render),
+        }, el('span', {}, p), p === state.me.about ? el('span', { class: 'check' }, '✓') : null)),
+      );
+    };
+    render();
+    return box;
+  }
+
   $('#my-avatar').addEventListener('click', () => {
-    const about = el('input', { value: state.me.about || '', maxlength: 140 });
     const current = el('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
     const next = el('input', { type: 'password', placeholder: 'New password (min 6 characters)', autocomplete: 'new-password' });
     const next2 = el('input', { type: 'password', placeholder: 'Confirm new password', autocomplete: 'new-password' });
@@ -420,10 +477,7 @@
       el('div', { class: 'field' }, el('label', {}, 'Your name'),
         el('div', { style: 'font-size:17px' }, state.me.name),
         el('div', { class: 'username' }, '@' + state.me.username)),
-      el('div', { class: 'field' }, el('label', {}, 'About'), about),
-      el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: () => {
-        socket.emit('profile:update', { about: about.value }, () => { state.me.about = about.value; toast('Profile saved'); closePanel(); });
-      } }, 'Save')),
+      aboutEditor(),
       el('div', { class: 'field pw-form' }, el('label', {}, 'Change password'), current, next, next2),
       el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: async () => {
         if (next.value !== next2.value) return toast('New passwords do not match');
@@ -436,6 +490,37 @@
         }
       } }, 'Change password')),
     ]);
+  });
+
+  // Contact / group info, opened by clicking the chat header.
+  function showChatInfo() {
+    const c = state.current;
+    if (!c) return;
+    if (c.type === 'group') {
+      openPanel('Group info', [
+        avatar(c.name, c.color, 'xl'),
+        el('div', { class: 'info-name' }, c.name),
+        el('div', { class: 'info-sub' }, `Group · ${c.members.length} members`),
+        el('div', { class: 'section-label' }, `${c.members.length} members`),
+        c.members.map((id) => state.users.get(id)).filter(Boolean).map((u) => personItem(u, () => {
+          if (u.id === state.me.id) return;
+          closePanel();
+          openChat({ peerId: u.id });
+        })),
+      ]);
+      return;
+    }
+    const u = state.users.get(c.peer);
+    if (!u) return;
+    openPanel('Contact info', [
+      avatar(u.name, u.color, 'xl'),
+      el('div', { class: 'info-name' }, u.name),
+      el('div', { class: 'info-sub' }, '@' + u.username + (u.id !== state.me.id ? ' · ' + lastSeen(u) : '')),
+      el('div', { class: 'field' }, el('label', {}, 'About'), el('div', { class: 'info-about' }, u.about || '—')),
+    ]);
+  }
+  $('.conv-header').addEventListener('click', (e) => {
+    if (!e.target.closest('button')) showChatInfo();
   });
 
   // ---------- Conversation ----------

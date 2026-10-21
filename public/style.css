@@ -594,3 +594,39 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
 .small { font-size: 13px; margin: 0; }
 .pw-form { display: flex; flex-direction: column; gap: 14px; }
 .panel-body .username { color: var(--muted); font-size: 14px; margin-top: 4px; }
+
+/* ---------- About (status) & contact info ---------- */
+.conv-header { cursor: pointer; }
+.about-input { display: flex; align-items: center; gap: 8px; border-bottom: 2px solid var(--accent); }
+.panel-body .field .about-input input { border-bottom: 0; }
+.about-count { color: var(--muted); font-size: 13px; }
+.about-emojis { display: flex; flex-wrap: wrap; gap: 2px; margin-top: 10px; }
+.about-emojis button {
+  border: 0;
+  background: none;
+  font-size: 20px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.about-emojis button:hover { background: var(--active); }
+.about-preset {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  cursor: pointer;
+  font-size: 15.5px;
+  border-bottom: 1px solid var(--border);
+}
+.about-preset:hover { background: var(--hover); }
+.about-preset.selected { color: var(--accent); font-weight: 600; }
+.about-preset .check { font-size: 18px; }
+.info-name { text-align: center; font-size: 22px; }
+.info-sub { text-align: center; color: var(--muted); margin: 6px 0 12px; }
+.info-about { font-size: 16px; }
+@media (max-width: 760px) {
+  .app.in-chat.show-panel .sidebar { display: flex; }
+  .app.in-chat.show-panel .main { display: none; }
+}

@@ -16,6 +16,7 @@ network: office LAN, home Wi-Fi or mobile data.
   - A shared file can only be opened by people in the chat it was sent to
 - **Status:** sent / delivered / read ticks, online and "last seen", and "typing…"
 - **Messages:** reply, copy and delete for everyone, plus an emoji picker, clickable links, unread counts, search and desktop notifications
+- **About (status):** WhatsApp-style moods like 🟢 Available, 🤝 In a meeting, 🚜 On field visit, or your own text with emojis. Tap a chat's name to see someone's About
 - **Look:** light and dark theme, and a layout that also works on phones
 
 ## 1. Try it on one PC or office network
