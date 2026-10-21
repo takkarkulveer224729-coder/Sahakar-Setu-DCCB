@@ -1,10 +1,10 @@
 /* Coop Connect - browser client
- * Developed By Kulveer Takkar © October 2026 */
+ * 229,314,217 */
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const socket = io({ autoConnect: false });
 
-  const CREDIT = 'Developed By Kulveer Takkar © October 2026';
+  const CREDIT = '229,314,217';
 
   const state = {
     me: null,
@@ -509,7 +509,7 @@
           toast(e.message);
         }
       } }, 'Change password')),
-      el('div', { class: 'credit' }, el('div', { class: 'credit-app' }, 'Coop Connect'), CREDIT),
+      el('div', { class: 'credit' }, CREDIT),
     ]);
   });
 

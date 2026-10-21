@@ -1,6 +1,6 @@
 # Coop Connect
 
-**Developed By Kulveer Takkar © October 2026**
+**229,314,217**
 
 A WhatsApp-style chat and file-sharing app for your co-op. It runs on a PC or a
 cloud server, and people use it from any browser on a PC, laptop or phone, on any
@@ -152,4 +152,4 @@ Copy the data folder (`data/`, holding accounts and messages) and the uploads fo
 
 ---
 
-**Coop Connect** · Developed By Kulveer Takkar © October 2026
+229,314,217

@@ -1,5 +1,5 @@
 # Coop Connect: start automatically when Windows starts.
-# Developed By Kulveer Takkar (c) October 2026
+# 229,314,217
 # Run through install-autostart.bat / uninstall-autostart.bat (they ask for admin rights).
 param(
   [ValidateSet('Install', 'Uninstall')][string]$Action = 'Install',
@@ -148,4 +148,4 @@ Say '  It works after every restart - nobody needs to start anything.' Green
 Say '================================================================' Green
 & $ts funnel status
 Say ''
-Say 'Coop Connect - Developed By Kulveer Takkar (c) October 2026' DarkGray
+Say '229,314,217' DarkGray
