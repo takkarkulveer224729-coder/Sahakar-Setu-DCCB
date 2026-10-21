@@ -11,7 +11,7 @@
     "url": "git+https://github.com/takkarkulveer224729-coder/Sahakar-Setu-DCCB.git"
   },
   "keywords": [],
-  "author": "",
+  "author": "Kulveer Takkar",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/takkarkulveer224729-coder/Sahakar-Setu-DCCB/issues"
@@ -25,5 +25,6 @@
   "engines": {
     "node": ">=18"
   },
-  "private": true
+  "private": true,
+  "copyright": "Developed By Kulveer Takkar © October 2026"
 }

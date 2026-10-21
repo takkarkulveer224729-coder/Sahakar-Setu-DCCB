@@ -1,5 +1,7 @@
 # Coop Connect
 
+**Developed By Kulveer Takkar © October 2026**
+
 A WhatsApp-style chat and file-sharing app for your co-op. It runs on a PC or a
 cloud server, and people use it from any browser on a PC, laptop or phone, on any
 network: office LAN, home Wi-Fi or mobile data.
@@ -147,3 +149,7 @@ Put these in a `settings.env` file next to `server.js` (see `settings.example.en
 
 Copy the data folder (`data/`, holding accounts and messages) and the uploads folder
 (`uploads/`, holding shared files). For Docker, back up the `/data` volume.
+
+---
+
+**Coop Connect** · Developed By Kulveer Takkar © October 2026
