@@ -138,7 +138,7 @@
     <p class="note">Up to 30 branches. Use Google Chrome on a laptop or desktop with good internet (about 4 Mbps) for the best experience and for the written record. Allow camera and microphone when asked.</p>
     <button id="dlAfter" class="primary hidden" style="margin-top:12px">Download last meeting record (Word)</button>
   </div>
-  <div class="credit">Developed by <b>Kulveer Takkar</b></div>
+  <div class="credit">Developed by <b>Kulveer Takkar</b> · Oct 2026</div>
 </section>
 
 <!-- ============ MEETING ============ -->
@@ -595,7 +595,7 @@ function buildDocumentXml(lines, startedAt, withLogo) {
     else body += para(run(`[${fmtTime(l.t)}]  `, { color: "888888", sz: 20 }) + run(l.branch + ": ", { b: true, color: "0163D2" }) + run(l.text), 100);
   }
   body += para(run("Note: this record was produced by automatic speech-to-text and may contain errors.", { i: true, color: "888888", sz: 18 }), 60);
-  body += para(run("CoopMeet · Developed by Kulveer Takkar", { color: "0163D2", sz: 18 }), 0);
+  body += para(run("CoopMeet · Developed by Kulveer Takkar · Oct 2026", { color: "0163D2", sz: 18 }), 0);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 }
