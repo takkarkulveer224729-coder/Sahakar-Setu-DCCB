@@ -1,5 +1,4 @@
 # Coop Connect: start automatically when Windows starts.
-# 229,314,217
 # Run through install-autostart.bat / uninstall-autostart.bat (they ask for admin rights).
 param(
   [ValidateSet('Install', 'Uninstall')][string]$Action = 'Install',
@@ -147,5 +146,3 @@ Say '  All set! Your permanent Coop Connect link is the https address below.' Gr
 Say '  It works after every restart - nobody needs to start anything.' Green
 Say '================================================================' Green
 & $ts funnel status
-Say ''
-Say '229,314,217' DarkGray

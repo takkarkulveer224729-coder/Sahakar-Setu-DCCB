@@ -1,6 +1,6 @@
 # Coop Connect
 
-**229,314,217**
+<p align="center"><img src="public/img/logo.png" alt="Coop Connect logo" width="180"></p>
 
 A WhatsApp-style chat and file-sharing app for your co-op. It runs on a PC or a
 cloud server, and people use it from any browser on a PC, laptop or phone, on any
@@ -149,7 +149,3 @@ Put these in a `settings.env` file next to `server.js` (see `settings.example.en
 
 Copy the data folder (`data/`, holding accounts and messages) and the uploads folder
 (`uploads/`, holding shared files). For Docker, back up the `/data` volume.
-
----
-
-229,314,217

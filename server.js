@@ -1,5 +1,4 @@
 // Coop Connect - a WhatsApp-style chat & file sharing server.
-// 229,314,217
 // Run with `npm start`, then open http://localhost:3000. To reach it from any
 // network, put it online (see README: public link or cloud hosting).
 
@@ -730,8 +729,7 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
 }
 
 server.listen(PORT, () => {
-  console.log(`\n  ${APP_NAME} is running!`);
-  console.log('  229,314,217\n');
+  console.log(`\n  ${APP_NAME} is running!\n`);
   console.log(`  On this PC:        http://localhost:${PORT}`);
   for (const iface of Object.values(os.networkInterfaces()).flat()) {
     if (iface && iface.family === 'IPv4' && !iface.internal) {

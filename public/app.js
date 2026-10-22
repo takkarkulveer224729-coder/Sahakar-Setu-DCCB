@@ -1,10 +1,7 @@
-/* Coop Connect - browser client
- * 229,314,217 */
+/* Coop Connect - browser client */
 (() => {
   const $ = (sel) => document.querySelector(sel);
   const socket = io({ autoConnect: false });
-
-  const CREDIT = '229,314,217';
 
   const state = {
     me: null,
@@ -181,7 +178,7 @@
     const chat = state.chats.get(chatId);
     const title = chat ? chatTitle(chat) : 'New message';
     const body = (chat && chat.type === 'group' ? userName(m.from) + ': ' : '') + previewText(m);
-    const n = new Notification(title, { body, tag: chatId });
+    const n = new Notification(title, { body, tag: chatId, icon: 'img/icon-192.png' });
     n.onclick = () => { window.focus(); openChat({ chatId }); n.close(); };
   }
 
@@ -509,7 +506,6 @@
           toast(e.message);
         }
       } }, 'Change password')),
-      el('div', { class: 'credit' }, CREDIT),
     ]);
   });
 
@@ -1150,7 +1146,7 @@
     showCallScreen({ status: kind === 'video' ? 'Incoming video call…' : 'Incoming voice call…', incoming: true });
     startRing(true);
     if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
-      const n = new Notification(`${userName(from)} is calling`, { body: kind === 'video' ? 'Video call' : 'Voice call', tag: 'call-' + callId, requireInteraction: true });
+      const n = new Notification(`${userName(from)} is calling`, { body: kind === 'video' ? 'Video call' : 'Voice call', tag: 'call-' + callId, requireInteraction: true, icon: 'img/icon-192.png' });
       n.onclick = () => { window.focus(); n.close(); };
     }
   });

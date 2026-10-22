@@ -4,16 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coop Connect</title>
-  <meta name="copyright" content="229,314,217">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💬</text></svg>">
+  <meta name="theme-color" content="#008069">
+  <link rel="icon" type="image/png" href="img/favicon.png">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.webmanifest">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <!-- Login -->
   <div id="login" class="login hidden">
     <div class="login-card">
-      <div class="login-logo">💬</div>
-      <h1>Coop Connect</h1>
+      <img class="login-logo" src="img/logo.png" alt="Coop Connect" width="150" height="150">
       <p class="muted">Chat and share files with your co-op, from anywhere.</p>
       <div class="tabs" role="tablist">
         <button type="button" id="tab-login" class="tab active" role="tab">Log in</button>
@@ -49,7 +50,6 @@
         <div class="error" data-error></div>
         <p class="muted small">Already have an account? <a href="#" data-switch="login">Log in</a></p>
       </form>
-      <div class="credit">229,314,217</div>
     </div>
   </div>
 
@@ -89,10 +89,8 @@
 
     <main id="main" class="main">
       <div id="welcome" class="welcome">
-        <div class="welcome-art">💬</div>
-        <h1>Coop Connect</h1>
+        <img class="welcome-logo" src="img/logo.png" alt="Coop Connect" width="220" height="220">
         <p class="muted">Send and receive messages, photos, videos and documents.<br>Pick a chat on the left or start a new one.</p>
-        <div class="credit welcome-credit">229,314,217</div>
       </div>
 
       <div id="conversation" class="conversation hidden">
