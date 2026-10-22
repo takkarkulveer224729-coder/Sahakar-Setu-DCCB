@@ -1,0 +1,626 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>CoopMeet</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1714; --panel:#17221e; --panel2:#1f2d28; --line:#2c3d36;
+    --ink:#e8f0ec; --muted:#93a89f; --accent:#3ccf8e; --accent-ink:#06261a;
+    --danger:#ef5b5b; --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+    font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  button{font:inherit;cursor:pointer;border:0;border-radius:999px}
+  .hidden{display:none!important}
+
+  /* Join screen */
+  #join{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}
+  .card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:24px}
+  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+  .logo{width:36px;height:36px;border-radius:10px;background:var(--accent);display:grid;place-items:center;
+    color:var(--accent-ink);font-weight:800}
+  h1{font-size:22px;margin:0}
+  .sub{color:var(--muted);margin:0 0 18px}
+  #preview{width:100%;aspect-ratio:4/3;object-fit:cover;background:#000;border-radius:var(--radius);
+    transform:scaleX(-1);margin-bottom:16px}
+  label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
+  input,select{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);
+    background:var(--panel2);color:var(--ink);font:inherit;margin-bottom:14px}
+  input:focus,select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .primary{width:100%;padding:13px;background:var(--accent);color:var(--accent-ink);font-weight:700}
+  .primary:disabled{opacity:.5;cursor:default}
+  .note{color:var(--muted);font-size:12.5px;margin:12px 0 0}
+  #joinErr{color:var(--danger);font-size:13px;margin:8px 0 0}
+
+  /* Meeting screen */
+  #meet{height:100%;display:flex;flex-direction:column}
+  header{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 16px;
+    border-bottom:1px solid var(--line);background:var(--panel)}
+  header .t{font-weight:700}
+  header .s{color:var(--muted);font-size:12.5px}
+  .pill{font-size:12px;padding:3px 9px;border-radius:999px;background:var(--panel2);color:var(--muted)}
+  .pill.rec{color:#ffb4b4}
+  .pill.rec::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;
+    background:var(--danger);margin-right:6px;vertical-align:1px}
+  main{flex:1;min-height:0;display:flex}
+  #grid{flex:1;min-width:0;overflow:auto;padding:12px;display:grid;gap:10px;align-content:start;
+    grid-template-columns:repeat(auto-fill,minmax(150px,1fr));grid-auto-flow:dense}
+  .tile{outline:3px solid transparent;transition:outline-color .15s}
+  .tile.speaking{outline-color:var(--accent)}
+  .tile.big{grid-column:span 2;grid-row:span 2}
+  .tile .muted{position:absolute;right:8px;top:8px;font-size:11px;padding:2px 7px;border-radius:6px;background:rgba(0,0,0,.6)}
+  .tile{position:relative;background:#000;border-radius:var(--radius);overflow:hidden;aspect-ratio:4/3}
+  .tile video{width:100%;height:100%;object-fit:cover}
+  .tile.me video{transform:scaleX(-1)}
+  .tile .name{position:absolute;left:8px;bottom:8px;padding:3px 9px;border-radius:8px;
+    background:rgba(0,0,0,.6);font-size:13px;font-weight:600;max-width:calc(100% - 16px);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #side{width:340px;border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column}
+  #side h2{font-size:14px;margin:0;padding:12px 14px;border-bottom:1px solid var(--line);
+    display:flex;justify-content:space-between;align-items:center}
+  #lines{flex:1;overflow:auto;padding:10px 14px}
+  .ln{margin:0 0 10px}
+  .ln .who{font-weight:700;color:var(--accent);font-size:13px}
+  .ln .tm{color:var(--muted);font-size:11.5px;margin-left:6px}
+  .ln.sys{color:var(--muted);font-size:12.5px;font-style:italic}
+  #interim{color:var(--muted);font-style:italic;padding:0 14px 10px;min-height:1em;font-size:13px}
+  #caption{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;max-width:min(680px,92vw);
+    background:rgba(0,0,0,.72);padding:6px 12px;border-radius:10px;font-size:14px;pointer-events:none}
+  footer{display:flex;justify-content:center;gap:10px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);background:var(--panel);flex-wrap:wrap}
+  .ctl{padding:10px 16px;background:var(--panel2);color:var(--ink);border:1px solid var(--line)}
+  .ctl.off{background:#3a2323;border-color:#5a2f2f}
+  .ctl.leave{background:var(--danger);color:#fff;border-color:transparent}
+  .ctl.dl{background:var(--accent);color:var(--accent-ink);font-weight:700;border-color:transparent}
+  #toggleSide{display:none}
+  @media (max-width:760px){
+    #side{position:fixed;inset:auto 0 0 0;height:60%;width:auto;border-left:0;border-top:1px solid var(--line);
+      border-radius:18px 18px 0 0;z-index:5;box-shadow:0 -10px 30px rgba(0,0,0,.4)}
+    #side.closed{display:none}
+    #toggleSide{display:inline-block}
+    #grid{grid-template-columns:repeat(auto-fill,minmax(100px,1fr));padding:8px;gap:6px}
+    #caption{bottom:120px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ JOIN ============ -->
+<section id="join">
+  <div class="card">
+    <div class="brand"><div class="logo">C</div><h1>CoopMeet</h1></div>
+    <p class="sub">One permanent meeting room. Enter your branch name to join.</p>
+    <video id="preview" autoplay muted playsinline></video>
+    <label for="branch">Branch name</label>
+    <input id="branch" placeholder="e.g. Ludhiana Main Branch" maxlength="60" autocomplete="off">
+    <label for="lang">Language spoken (for the written record)</label>
+    <select id="lang">
+      <option value="en-IN">English (India)</option>
+      <option value="hi-IN">Hindi</option>
+      <option value="pa-IN">Punjabi</option>
+      <option value="mr-IN">Marathi</option>
+      <option value="gu-IN">Gujarati</option>
+      <option value="ta-IN">Tamil</option>
+      <option value="te-IN">Telugu</option>
+      <option value="bn-IN">Bengali</option>
+      <option value="kn-IN">Kannada</option>
+      <option value="ml-IN">Malayalam</option>
+      <option value="en-US">English (US)</option>
+    </select>
+    <button id="joinBtn" class="primary">Join meeting</button>
+    <div id="joinErr"></div>
+    <p class="note">Up to 30 branches. Use Google Chrome on a laptop or desktop with good internet (about 4 Mbps) for the best experience and for the written record. Allow camera and microphone when asked.</p>
+    <button id="dlAfter" class="primary hidden" style="margin-top:12px">Download last meeting record (Word)</button>
+  </div>
+</section>
+
+<!-- ============ MEETING ============ -->
+<section id="meet" class="hidden">
+  <header>
+    <div>
+      <div class="t">CoopMeet</div>
+      <div class="s" id="status">Connecting…</div>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span class="pill" id="count">1 branch</span>
+      <span class="pill rec" id="recPill">Recording text</span>
+    </div>
+  </header>
+  <main>
+    <div id="grid"></div>
+    <aside id="side" class="closed">
+      <h2>Meeting record <span class="pill" id="lineCount">0 lines</span></h2>
+      <div id="lines"></div>
+      <div id="interim"></div>
+    </aside>
+  </main>
+  <div id="caption" class="hidden"></div>
+  <footer>
+    <button class="ctl" id="micBtn">Mic on</button>
+    <button class="ctl" id="camBtn">Camera on</button>
+    <button class="ctl" id="toggleSide">Record</button>
+    <button class="ctl dl" id="dlBtn">Word record</button>
+    <button class="ctl leave" id="leaveBtn">Leave</button>
+  </footer>
+</section>
+
+<script>
+/* ---------- Config ---------- */
+const MEETING_NAME = "CoopMeet";
+// Fixed room key: everyone who opens this page lands in the same room.
+// Change this string if you ever want a fresh, separate room.
+const ROOM_KEY = "coopmeet-room-c9f41e7a52";
+const HUB_ID = ROOM_KEY + "-hub";
+const MAX_BRANCHES = 30;          // room limit
+const AUTO_MUTE_AFTER = 5;        // join muted when this many are already in
+
+/* ---------- State ---------- */
+const $ = id => document.getElementById(id);
+let me = { branch: "", id: null, lang: "en-IN" };
+let localStream = null, mediaPeer = null, hubPeer = null, hubConn = null;
+let inMeeting = false, leaving = false, reconnecting = false;
+let micOn = true, camOn = true;
+const calls = new Map();       // peerId -> MediaConnection
+const roster = new Map();      // peerId -> branch
+const log = new Map();         // lineId -> {id, t, branch, text, kind}
+let meetingStart = null;
+let captionTimer = null;
+
+/* ---------- Join screen ---------- */
+async function initPreview() {
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15, max: 24 } },
+      audio: { echoCancellation: true, noiseSuppression: true }
+    });
+    $("preview").srcObject = localStream;
+  } catch (e) {
+    $("joinErr").textContent = "Camera/microphone not available: " + e.message +
+      ". You can still join to watch and listen.";
+  }
+}
+try { const b = localStorage.getItem("coopmeet-branch"); if (b) $("branch").value = b;
+      const l = localStorage.getItem("coopmeet-lang"); if (l) $("lang").value = l; } catch (e) {}
+initPreview();
+
+$("branch").addEventListener("keydown", e => { if (e.key === "Enter") join(); });
+$("joinBtn").addEventListener("click", join);
+
+async function join() {
+  const branch = $("branch").value.trim();
+  if (!branch) { $("joinErr").textContent = "Please type your branch name."; $("branch").focus(); return; }
+  me.branch = branch; me.lang = $("lang").value;
+  try { localStorage.setItem("coopmeet-branch", branch); localStorage.setItem("coopmeet-lang", me.lang); } catch (e) {}
+  $("joinBtn").disabled = true; $("joinErr").textContent = "";
+  if (!localStream) await initPreview();
+  if (!localStream) localStream = new MediaStream();
+
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); audioCtx.resume(); } catch (e) {}
+  firstWelcome = true;
+  leaving = false; inMeeting = true; log.clear(); roster.clear(); meetingStart = Date.now();
+  $("join").classList.add("hidden"); $("meet").classList.remove("hidden");
+  $("grid").innerHTML = ""; $("lines").innerHTML = "";
+  addTile("me", localStream, branch + " (you)", true);
+  updateButtons();
+
+  mediaPeer = new Peer({ debug: 1 });
+  mediaPeer.on("open", async id => {
+    me.id = id;
+    setStatus("Joining room…");
+    await tryHub();
+    connectHub(false);
+    startSpeech();
+  });
+  mediaPeer.on("call", call => {
+    call.answer(localStream);
+    wireCall(call);
+  });
+  mediaPeer.on("error", e => {
+    if (e.type === "peer-unavailable" && String(e.message).includes(HUB_ID)) onHubLost();
+    else if (e.type === "network" || e.type === "server-error") setStatus("Network problem — retrying…");
+    else console.warn("peer error", e.type, e);
+  });
+  mediaPeer.on("disconnected", () => { if (!leaving) try { mediaPeer.reconnect(); } catch (e) {} });
+}
+
+/* ---------- Hub (roster + shared record) ----------
+   The first person in the room holds the fixed HUB_ID. If they leave,
+   someone else takes over automatically. Video goes peer-to-peer. */
+const hub = { members: new Map(), conns: new Map(), log: new Map() };
+
+function tryHub() {
+  return new Promise(resolve => {
+    if (hubPeer) return resolve(true);
+    const p = new Peer(HUB_ID, { debug: 0 });
+    let done = false;
+    const finish = ok => { if (done) return; done = true; if (!ok) try { p.destroy(); } catch (e) {} resolve(ok); };
+    p.on("open", () => { hubPeer = p; setupHub(p); finish(true); });
+    p.on("error", e => { if (!done) finish(false); else console.warn("hub error", e.type); });
+    setTimeout(() => finish(false), 8000);
+  });
+}
+
+function setupHub(p) {
+  hub.members.clear(); hub.conns.clear(); hub.log = new Map(log);
+  p.on("connection", c => {
+    c.on("data", m => hubHandle(c, m));
+    c.on("close", () => hubDrop(c.peer));
+    c.on("error", () => hubDrop(c.peer));
+  });
+  p.on("disconnected", () => { if (!leaving) try { p.reconnect(); } catch (e) {} });
+}
+
+function hubBroadcast(msg) { for (const c of hub.conns.values()) if (c.open) try { c.send(msg); } catch (e) {} }
+function hubRoster() { return [...hub.members].map(([id, m]) => ({ id, branch: m.branch })); }
+function hubAddLine(line) {
+  if (hub.log.has(line.id)) return;
+  hub.log.set(line.id, line);
+  hubBroadcast({ type: "line", line });
+}
+
+function hubHandle(c, m) {
+  if (!m || typeof m !== "object") return;
+  if (m.type === "join") {
+    if (!m.rejoin && !hub.members.has(c.peer) && hub.members.size >= MAX_BRANCHES) {
+      c.send({ type: "full" }); setTimeout(() => c.close(), 500); return;
+    }
+    const branch = String(m.branch || "Unknown branch").slice(0, 60);
+    hub.members.set(c.peer, { branch });
+    hub.conns.set(c.peer, c);
+    for (const l of (m.lines || [])) if (l && l.id && !hub.log.has(l.id)) hub.log.set(l.id, l);
+    c.send({ type: "welcome", roster: hubRoster(), lines: [...hub.log.values()] });
+    hubBroadcast({ type: "roster", roster: hubRoster() });
+    if (!m.rejoin) hubAddLine({ id: "sys-" + c.peer + "-" + Date.now(), t: Date.now(), branch, text: "joined the meeting", kind: "sys" });
+  } else if (m.type === "line" && m.line && m.line.id) {
+    const l = m.line;
+    hubAddLine({ id: String(l.id), t: +l.t || Date.now(), branch: String(l.branch).slice(0, 60),
+                 text: String(l.text).slice(0, 2000), kind: l.kind === "sys" ? "sys" : "speech" });
+  }
+}
+
+function hubDrop(id) {
+  const m = hub.members.get(id);
+  if (!m) return;
+  hub.members.delete(id); hub.conns.delete(id);
+  hubBroadcast({ type: "roster", roster: hubRoster() });
+  hubAddLine({ id: "sys-" + id + "-left-" + Date.now(), t: Date.now(), branch: m.branch, text: "left the meeting", kind: "sys" });
+}
+
+/* ---------- Client side of the hub ---------- */
+function connectHub(rejoin) {
+  if (leaving) return;
+  const c = mediaPeer.connect(HUB_ID, { reliable: true });
+  c.on("open", () => {
+    hubConn = c;
+    setStatus("Connected · " + MEETING_NAME);
+    c.send({ type: "join", branch: me.branch, rejoin, lines: [...log.values()] });
+  });
+  c.on("data", onHubMsg);
+  c.on("close", () => { if (hubConn === c) onHubLost(); });
+  c.on("error", () => { if (hubConn === c) onHubLost(); });
+}
+
+function onHubLost() {
+  hubConn = null;
+  if (leaving || reconnecting) return;
+  reconnecting = true;
+  setStatus("Reconnecting…");
+  setTimeout(async () => {
+    if (leaving) { reconnecting = false; return; }
+    await tryHub();
+    reconnecting = false;
+    connectHub(true);
+  }, 400 + Math.random() * 1800);
+}
+
+function onHubMsg(m) {
+  if (!m || typeof m !== "object") return;
+  if (m.type === "welcome") {
+    (m.lines || []).forEach(addLine);
+    if (firstWelcome && micOn && (m.roster || []).length > AUTO_MUTE_AFTER) {
+      setMic(false);
+      flash("You joined muted because many branches are here. Tap Mic to speak.");
+    }
+    firstWelcome = false;
+    setRoster(m.roster);
+  } else if (m.type === "full") {
+    alert("The meeting is full (" + MAX_BRANCHES + " branches). Please try again later.");
+    leave(); return;
+  } else if (m.type === "roster") setRoster(m.roster);
+  else if (m.type === "line") addLine(m.line);
+}
+
+function setRoster(list) {
+  roster.clear();
+  (list || []).forEach(r => roster.set(r.id, r.branch));
+  $("count").textContent = roster.size + (roster.size === 1 ? " branch" : " branches");
+  for (const [id, call] of calls) {
+    const tile = document.querySelector(`.tile[data-id="${CSS.escape(id)}"] .name`);
+    if (tile && roster.has(id)) tile.textContent = roster.get(id);
+  }
+  reconcileCalls();
+  applyQuality();
+}
+
+/* ---------- Video calls (full mesh) ---------- */
+function reconcileCalls() {
+  if (!mediaPeer || !me.id || leaving) return;
+  for (const id of roster.keys()) {
+    if (id === me.id || calls.has(id)) continue;
+    if (me.id > id) { // only one side dials, so no duplicate calls
+      const call = mediaPeer.call(id, localStream, { metadata: { branch: me.branch } });
+      if (call) wireCall(call);
+    }
+  }
+}
+setInterval(reconcileCalls, 5000);
+
+function wireCall(call) {
+  const id = call.peer;
+  if (calls.has(id) && calls.get(id) !== call) { try { calls.get(id).close(); } catch (e) {} }
+  calls.set(id, call);
+  call.on("stream", s => addTile(id, s, roster.get(id) || (call.metadata && call.metadata.branch) || "Branch", false));
+  const drop = () => { if (calls.get(id) === call) { calls.delete(id); removeTile(id); } };
+  call.on("close", drop); call.on("error", drop);
+  const pc = call.peerConnection;
+  if (pc) pc.addEventListener("iceconnectionstatechange", () => {
+    if (pc.iceConnectionState === "failed" || pc.iceConnectionState === "closed") { try { call.close(); } catch (e) {} drop(); }
+    if (pc.iceConnectionState === "connected" || pc.iceConnectionState === "completed") applyQuality();
+  });
+}
+
+function addTile(id, stream, name, isMe) {
+  let t = document.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
+  if (!t) {
+    t = document.createElement("div"); t.className = "tile" + (isMe ? " me" : ""); t.dataset.id = id;
+    const v = document.createElement("video"); v.autoplay = true; v.playsInline = true; if (isMe) v.muted = true;
+    const n = document.createElement("div"); n.className = "name";
+    t.append(v, n); $("grid").append(t);
+  }
+  const v = t.querySelector("video");
+  if (v.srcObject !== stream) { v.srcObject = stream; v.play().catch(() => {}); watchAudio(id, stream); }
+  t.querySelector(".name").textContent = name;
+}
+function removeTile(id) { unwatch(id); const t = document.querySelector(`.tile[data-id="${CSS.escape(id)}"]`); if (t) t.remove(); }
+
+/* ---------- Scaling for big rooms ----------
+   Every branch sends its video to every other branch, so as the room grows
+   each video stream is made smaller and lighter. At 25 branches each person
+   needs roughly 3–4 Mbps up and down. */
+function qualityFor(n) {
+  if (n <= 4)  return { v: 700000, scale: 1, fps: 24, a: 40000 };
+  if (n <= 8)  return { v: 300000, scale: 2, fps: 15, a: 32000 };
+  if (n <= 15) return { v: 150000, scale: 3, fps: 12, a: 24000 };
+  return              { v:  90000, scale: 4, fps: 10, a: 20000 };
+}
+let lastQ = "";
+async function applyQuality() {
+  const n = Math.max(roster.size, calls.size + 1), q = qualityFor(n);
+  const key = JSON.stringify(q) + calls.size;
+  for (const c of calls.values()) {
+    const pc = c.peerConnection; if (!pc) continue;
+    for (const s of pc.getSenders()) {
+      if (!s.track) continue;
+      try {
+        const p = s.getParameters();
+        if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+        if (s.track.kind === "video") {
+          p.encodings[0].maxBitrate = q.v; p.encodings[0].scaleResolutionDownBy = q.scale; p.encodings[0].maxFramerate = q.fps;
+          p.degradationPreference = "maintain-framerate";
+        } else p.encodings[0].maxBitrate = q.a;
+        await s.setParameters(p);
+      } catch (e) {}
+    }
+  }
+  lastQ = key;
+}
+
+let audioCtx = null, firstWelcome = true, spotId = null, spotAt = 0;
+const meters = new Map();
+function watchAudio(id, stream) {
+  unwatch(id);
+  if (!audioCtx || !stream.getAudioTracks().length) return;
+  try {
+    const src = audioCtx.createMediaStreamSource(stream), an = audioCtx.createAnalyser();
+    an.fftSize = 512; src.connect(an);
+    meters.set(id, { src, an, buf: new Uint8Array(an.fftSize), hold: 0 });
+  } catch (e) {}
+}
+function unwatch(id) { const m = meters.get(id); if (m) { try { m.src.disconnect(); } catch (e) {} meters.delete(id); } }
+const tileEl = id => document.querySelector(`.tile[data-id="${CSS.escape(id)}"]`);
+
+setInterval(() => {
+  if (!inMeeting) return;
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+  let best = null, bestV = 0;
+  for (const [id, m] of meters) {
+    m.an.getByteTimeDomainData(m.buf);
+    let sum = 0; for (const x of m.buf) { const d = x - 128; sum += d * d; }
+    const rms = Math.sqrt(sum / m.buf.length);
+    const talking = rms > 5 && !(id === "me" && !micOn);
+    m.hold = talking ? 4 : Math.max(0, m.hold - 1);
+    const t = tileEl(id); if (t) t.classList.toggle("speaking", m.hold > 0);
+    if (id !== "me" && rms > bestV) { bestV = rms; best = id; }
+  }
+  if (best && bestV > 7) setSpotlight(best);
+}, 200);
+
+function setSpotlight(id) {
+  const tiles = document.querySelectorAll(".tile");
+  if (tiles.length < 3 || id === spotId || Date.now() - spotAt < 2000) return;
+  const t = tileEl(id); if (!t) return;
+  tiles.forEach(x => x.classList.remove("big"));
+  t.classList.add("big");
+  $("grid").prepend(t);
+  spotId = id; spotAt = Date.now();
+}
+
+function flash(msg) {
+  const c = $("caption"); c.textContent = msg; c.classList.remove("hidden");
+  clearTimeout(captionTimer); captionTimer = setTimeout(() => c.classList.add("hidden"), 6000);
+}
+
+/* ---------- Written record (speech-to-text) ---------- */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+let rec = null, srBlocked = false;
+
+function startSpeech() {
+  if (!SR) { $("recPill").textContent = "No speech-to-text here"; $("recPill").classList.remove("rec");
+    $("interim").textContent = "This browser can't convert speech to text. Others' words are still recorded."; return; }
+  if (rec || !micOn || !inMeeting || srBlocked) return;
+  rec = new SR();
+  rec.lang = me.lang; rec.continuous = true; rec.interimResults = true;
+  rec.onresult = e => {
+    let interim = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const r = e.results[i], txt = r[0].transcript.trim();
+      if (!txt) continue;
+      if (r.isFinal) sendOwnLine(txt); else interim += txt + " ";
+    }
+    $("interim").textContent = interim ? me.branch + ": " + interim : "";
+  };
+  rec.onerror = e => { if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+    srBlocked = true; $("recPill").textContent = "Speech-to-text blocked"; $("recPill").classList.remove("rec"); } };
+  rec.onend = () => { rec = null; if (inMeeting && micOn && !srBlocked) setTimeout(startSpeech, 300); };
+  try { rec.start(); } catch (e) { rec = null; }
+}
+function stopSpeech() { if (rec) { const r = rec; rec = null; r.onend = null; try { r.stop(); } catch (e) {} } $("interim").textContent = ""; }
+
+function sendOwnLine(text) {
+  const line = { id: me.id + "-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+                 t: Date.now(), branch: me.branch, text, kind: "speech" };
+  addLine(line);
+  if (hubConn && hubConn.open) try { hubConn.send({ type: "line", line }); } catch (e) {}
+  // If not connected right now, the line is resent on reconnect.
+}
+
+function addLine(l) {
+  if (!l || !l.id || log.has(l.id)) return;
+  log.set(l.id, l);
+  renderLines();
+  if (l.kind === "speech") {
+    const c = $("caption"); c.textContent = l.branch + ": " + l.text; c.classList.remove("hidden");
+    clearTimeout(captionTimer); captionTimer = setTimeout(() => c.classList.add("hidden"), 5000);
+  }
+}
+function sortedLines() { return [...log.values()].sort((a, b) => a.t - b.t); }
+const fmtTime = t => new Date(t).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+function renderLines() {
+  const box = $("lines"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  box.innerHTML = "";
+  for (const l of sortedLines()) {
+    const d = document.createElement("div");
+    if (l.kind === "sys") { d.className = "ln sys"; d.textContent = `${fmtTime(l.t)} — ${l.branch} ${l.text}`; }
+    else {
+      d.className = "ln";
+      const w = document.createElement("span"); w.className = "who"; w.textContent = l.branch;
+      const tm = document.createElement("span"); tm.className = "tm"; tm.textContent = fmtTime(l.t);
+      const p = document.createElement("div"); p.textContent = l.text;
+      d.append(w, tm, p);
+    }
+    box.append(d);
+  }
+  const n = [...log.values()].filter(l => l.kind === "speech").length;
+  $("lineCount").textContent = n + (n === 1 ? " line" : " lines");
+  if (atBottom) box.scrollTop = box.scrollHeight;
+}
+
+/* ---------- Word (.docx) export ---------- */
+const xmlEsc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[c]))
+                             .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
+function run(text, o = {}) {
+  let rPr = "";
+  if (o.b) rPr += "<w:b/>"; if (o.i) rPr += "<w:i/>";
+  if (o.color) rPr += `<w:color w:val="${o.color}"/>`;
+  if (o.sz) rPr += `<w:sz w:val="${o.sz}"/><w:szCs w:val="${o.sz}"/>`;
+  return `<w:r>${rPr ? "<w:rPr>" + rPr + "</w:rPr>" : ""}<w:t xml:space="preserve">${xmlEsc(text)}</w:t></w:r>`;
+}
+const para = (runs, after = 120) => `<w:p><w:pPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
+
+function buildDocumentXml(lines, startedAt) {
+  const date = new Date(startedAt || (lines[0] && lines[0].t) || Date.now());
+  const branches = new Map();
+  for (const l of lines) {
+    const b = branches.get(l.branch) || { first: l.t, last: l.t, said: 0 };
+    b.first = Math.min(b.first, l.t); b.last = Math.max(b.last, l.t); if (l.kind === "speech") b.said++;
+    branches.set(l.branch, b);
+  }
+  let body = "";
+  body += para(run(MEETING_NAME + " — Meeting Record", { b: true, sz: 36, color: "1B6E4A" }), 80);
+  body += para(run(date.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "numeric" }) +
+               "   ·   Generated " + new Date().toLocaleString(), { color: "666666", sz: 20 }), 240);
+  body += para(run("Branches present", { b: true, sz: 26 }), 80);
+  if (!branches.size) body += para(run("No one recorded.", { i: true }));
+  for (const [name, b] of branches)
+    body += para(run("• " + name, { b: true }) + run(`   ${fmtTime(b.first)} – ${fmtTime(b.last)}   ·   ${b.said} statement${b.said === 1 ? "" : "s"}`, { color: "666666" }), 60);
+  body += para("", 120);
+  body += para(run("Full record of the conversation", { b: true, sz: 26 }), 80);
+  for (const l of lines) {
+    if (l.kind === "sys") body += para(run(`[${fmtTime(l.t)}]  ${l.branch} ${l.text}`, { i: true, color: "888888", sz: 20 }), 80);
+    else body += para(run(`[${fmtTime(l.t)}]  `, { color: "888888", sz: 20 }) + run(l.branch + ": ", { b: true, color: "1B6E4A" }) + run(l.text), 100);
+  }
+  body += para(run("Note: this record was produced by automatic speech-to-text and may contain errors.", { i: true, color: "888888", sz: 18 }), 0);
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+}
+
+async function downloadDocx() {
+  const lines = sortedLines();
+  const zip = new JSZip();
+  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+  zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
+  zip.file("word/document.xml", buildDocumentXml(lines, meetingStart));
+  const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
+  const d = new Date(meetingStart || Date.now()), pad = n => String(n).padStart(2, "0");
+  const name = `CoopMeet-Record-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.docx`;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- Controls ---------- */
+function setStatus(s) { $("status").textContent = s; }
+function updateButtons() {
+  $("micBtn").textContent = micOn ? "Mic on" : "Mic off"; $("micBtn").classList.toggle("off", !micOn);
+  $("camBtn").textContent = camOn ? "Camera on" : "Camera off"; $("camBtn").classList.toggle("off", !camOn);
+}
+function setMic(on) {
+  micOn = on; localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+  micOn ? startSpeech() : stopSpeech(); updateButtons();
+}
+$("micBtn").onclick = () => setMic(!micOn);
+$("camBtn").onclick = () => { camOn = !camOn; localStream.getVideoTracks().forEach(t => t.enabled = camOn); updateButtons(); };
+$("toggleSide").onclick = () => $("side").classList.toggle("closed");
+$("dlBtn").onclick = downloadDocx;
+$("dlAfter").onclick = downloadDocx;
+$("leaveBtn").onclick = () => {
+  if (!confirm("Leave the meeting? Download the Word record first if you need it.")) return;
+  leave();
+};
+function leave() {
+  leaving = true; inMeeting = false; stopSpeech();
+  for (const id of [...meters.keys()]) unwatch(id); spotId = null;
+  for (const c of calls.values()) try { c.close(); } catch (e) {}
+  calls.clear();
+  try { hubConn && hubConn.close(); } catch (e) {}
+  try { mediaPeer && mediaPeer.destroy(); } catch (e) {}
+  try { hubPeer && hubPeer.destroy(); } catch (e) {}
+  hubConn = null; mediaPeer = null; hubPeer = null;
+  $("meet").classList.add("hidden"); $("join").classList.remove("hidden");
+  $("joinBtn").disabled = false;
+  $("dlAfter").classList.toggle("hidden", log.size === 0);
+  $("preview").srcObject = localStream;
+}
+window.addEventListener("beforeunload", e => { if (inMeeting) { e.preventDefault(); e.returnValue = ""; } });
+if (window.matchMedia("(min-width:761px)").matches) $("side").classList.remove("closed");
+</script>
+</body>
+</html>
