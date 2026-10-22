@@ -4,12 +4,16 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>CoopMeet</title>
+<link rel="icon" type="image/png" href="favicon.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="theme-color" content="#0163D2">
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
   :root{
-    --bg:#0f1714; --panel:#17221e; --panel2:#1f2d28; --line:#2c3d36;
-    --ink:#e8f0ec; --muted:#93a89f; --accent:#3ccf8e; --accent-ink:#06261a;
+    --brand:#0163D2; --brand-deep:#0150AD; --brand-glow:#2F86F0;
+    --bg:#0B1B33; --panel:#10264A; --panel2:#163261; --line:#23427A;
+    --ink:#EEF4FF; --muted:#9FB5D8; --accent:#4DA3FF; --accent-ink:#ffffff;
     --danger:#ef5b5b; --radius:14px;
   }
   *{box-sizing:border-box}
@@ -19,14 +23,25 @@
   .hidden{display:none!important}
 
   /* Join screen */
-  #join{min-height:100%;display:flex;align-items:center;justify-content:center;padding:24px 16px}
-  .card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--line);
-    border-radius:20px;padding:24px}
-  .brand{display:flex;align-items:center;gap:10px;margin-bottom:4px}
-  .logo{width:36px;height:36px;border-radius:10px;background:var(--accent);display:grid;place-items:center;
-    color:var(--accent-ink);font-weight:800}
-  h1{font-size:22px;margin:0}
-  .sub{color:var(--muted);margin:0 0 18px}
+  #join{min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;
+    padding:28px 16px;background:radial-gradient(circle at 50% 22%,var(--brand-glow) 0%,var(--brand) 38%,var(--brand-deep) 100%)}
+  .hero{display:flex;flex-direction:column;align-items:center;text-align:center;color:#fff}
+  .hero img{width:min(230px,56vw);height:auto;border-radius:50%;
+    box-shadow:0 0 0 6px rgba(255,255,255,.12),0 18px 50px rgba(0,30,80,.45);animation:pop .6s ease-out both}
+  .hero h1{font-size:28px;margin:14px 0 2px;letter-spacing:.3px}
+  .hero p{margin:0;color:rgba(255,255,255,.85);font-size:15px}
+  @keyframes pop{from{transform:scale(.85);opacity:.4}to{transform:none;opacity:1}}
+  @media (prefers-reduced-motion:reduce){.hero img{animation:none}}
+  .card{width:100%;max-width:420px;background:#fff;color:#14233d;border-radius:20px;padding:22px;
+    box-shadow:0 20px 50px rgba(0,30,80,.35)}
+  .card label{color:#4a5d7e}
+  .card input,.card select{background:#F3F7FD;color:#14233d;border-color:#D3DFF0}
+  .card input:focus,.card select:focus{outline-color:var(--brand)}
+  .card .primary{background:var(--brand);color:#fff}
+  .card .primary:hover{background:var(--brand-deep)}
+  .card .note{color:#5f7090}
+  .brandbar{display:flex;align-items:center;gap:10px}
+  .brandbar img{width:34px;height:34px;border-radius:50%}
   #preview{width:100%;aspect-ratio:4/3;object-fit:cover;background:#000;border-radius:var(--radius);
     transform:scaleX(-1);margin-bottom:16px}
   label{display:block;font-size:13px;color:var(--muted);margin:0 0 6px}
@@ -93,9 +108,12 @@
 
 <!-- ============ JOIN ============ -->
 <section id="join">
+  <div class="hero">
+    <img src="logo.png" alt="CoopMeet logo" width="230" height="230">
+    <h1>Welcome to CoopMeet</h1>
+    <p>Type your branch name and join the meeting</p>
+  </div>
   <div class="card">
-    <div class="brand"><div class="logo">C</div><h1>CoopMeet</h1></div>
-    <p class="sub">One permanent meeting room. Enter your branch name to join.</p>
     <video id="preview" autoplay muted playsinline></video>
     <label for="branch">Branch name</label>
     <input id="branch" placeholder="e.g. Ludhiana Main Branch" maxlength="60" autocomplete="off">
@@ -123,9 +141,12 @@
 <!-- ============ MEETING ============ -->
 <section id="meet" class="hidden">
   <header>
-    <div>
-      <div class="t">CoopMeet</div>
-      <div class="s" id="status">Connecting…</div>
+    <div class="brandbar">
+      <img src="logo.png" alt="">
+      <div>
+        <div class="t">CoopMeet</div>
+        <div class="s" id="status">Connecting…</div>
+      </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
       <span class="pill" id="count">1 branch</span>
@@ -544,7 +565,11 @@ function run(text, o = {}) {
 }
 const para = (runs, after = 120) => `<w:p><w:pPr><w:spacing w:after="${after}"/></w:pPr>${runs}</w:p>`;
 
-function buildDocumentXml(lines, startedAt) {
+function logoPara() {
+  const emu = 914400; // 1 inch
+  return `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:after="120"/></w:pPr><w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${emu}" cy="${emu}"/><wp:docPr id="1" name="Logo"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="1" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${emu}" cy="${emu}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`;
+}
+function buildDocumentXml(lines, startedAt, withLogo) {
   const date = new Date(startedAt || (lines[0] && lines[0].t) || Date.now());
   const branches = new Map();
   for (const l of lines) {
@@ -552,8 +577,8 @@ function buildDocumentXml(lines, startedAt) {
     b.first = Math.min(b.first, l.t); b.last = Math.max(b.last, l.t); if (l.kind === "speech") b.said++;
     branches.set(l.branch, b);
   }
-  let body = "";
-  body += para(run(MEETING_NAME + " — Meeting Record", { b: true, sz: 36, color: "1B6E4A" }), 80);
+  let body = withLogo ? logoPara() : "";
+  body += para(run(MEETING_NAME + " — Meeting Record", { b: true, sz: 36, color: "0163D2" }), 80);
   body += para(run(date.toLocaleDateString([], { weekday: "long", year: "numeric", month: "long", day: "numeric" }) +
                "   ·   Generated " + new Date().toLocaleString(), { color: "666666", sz: 20 }), 240);
   body += para(run("Branches present", { b: true, sz: 26 }), 80);
@@ -564,21 +589,28 @@ function buildDocumentXml(lines, startedAt) {
   body += para(run("Full record of the conversation", { b: true, sz: 26 }), 80);
   for (const l of lines) {
     if (l.kind === "sys") body += para(run(`[${fmtTime(l.t)}]  ${l.branch} ${l.text}`, { i: true, color: "888888", sz: 20 }), 80);
-    else body += para(run(`[${fmtTime(l.t)}]  `, { color: "888888", sz: 20 }) + run(l.branch + ": ", { b: true, color: "1B6E4A" }) + run(l.text), 100);
+    else body += para(run(`[${fmtTime(l.t)}]  `, { color: "888888", sz: 20 }) + run(l.branch + ": ", { b: true, color: "0163D2" }) + run(l.text), 100);
   }
   body += para(run("Note: this record was produced by automatic speech-to-text and may contain errors.", { i: true, color: "888888", sz: 18 }), 0);
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1134" w:header="708" w:footer="708" w:gutter="0"/></w:sectPr></w:body></w:document>`;
 }
 
 async function downloadDocx() {
   const lines = sortedLines();
   const zip = new JSZip();
   zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="png" ContentType="image/png"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>`);
   zip.file("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>`);
-  zip.file("word/document.xml", buildDocumentXml(lines, meetingStart));
+  let logo = null;
+  try { const r = await fetch("icon-192.png"); if (r.ok) logo = await r.arrayBuffer(); } catch (e) {}
+  if (logo) {
+    zip.file("word/media/logo.png", logo);
+    zip.file("word/_rels/document.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdLogo" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/logo.png"/></Relationships>`);
+  }
+  zip.file("word/document.xml", buildDocumentXml(lines, meetingStart, !!logo));
   const blob = await zip.generateAsync({ type: "blob", mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" });
   const d = new Date(meetingStart || Date.now()), pad = n => String(n).padStart(2, "0");
   const name = `CoopMeet-Record-${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}.docx`;
