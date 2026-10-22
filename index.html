@@ -42,6 +42,12 @@
   .card .note{color:#5f7090}
   .credit{color:rgba(255,255,255,.88);font-size:13px;letter-spacing:.3px;text-align:center}
   .credit b{color:#fff;font-weight:700}
+  .adminlink{background:none;color:var(--brand);font-size:13px;font-weight:600;padding:10px 0 0;width:100%;text-align:center}
+  .adminbox{border:1px dashed #B9CCEA;border-radius:14px;padding:12px 12px 0;margin-bottom:14px;background:#F8FBFF}
+  .adminbox h3{margin:0 0 8px;font-size:14px;color:#14233d}
+  .card .hint{font-size:12px;color:#5f7090;margin:-8px 0 12px}
+  .pill.pw{color:#fff;background:var(--brand)}
+  .ctl.end{background:#7a1f1f;border-color:transparent;color:#fff}
   .brandbar{display:flex;align-items:center;gap:10px}
   .brandbar img{width:34px;height:34px;border-radius:50%}
   #preview{width:100%;aspect-ratio:4/3;object-fit:cover;background:#000;border-radius:var(--radius);
@@ -119,6 +125,18 @@
     <video id="preview" autoplay muted playsinline></video>
     <label for="branch">Branch name</label>
     <input id="branch" placeholder="e.g. Ludhiana Main Branch" maxlength="60" autocomplete="off">
+    <div id="pwRow">
+      <label for="pw">Meeting password</label>
+      <input id="pw" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="8" placeholder="Numbers given by the admin" autocomplete="off">
+    </div>
+    <div id="adminBox" class="adminbox hidden">
+      <h3>Admin: start a new meeting</h3>
+      <label for="adminPin">Admin PIN</label>
+      <input id="adminPin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="off">
+      <label for="newPw">Set today's meeting password (4–8 digits)</label>
+      <input id="newPw" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="8" autocomplete="off" placeholder="e.g. 4821">
+      <p class="hint">Share this password with the branches. It works only for this meeting.</p>
+    </div>
     <label for="lang">Language spoken (for the written record)</label>
     <select id="lang">
       <option value="en-IN">English (India)</option>
@@ -135,6 +153,7 @@
     </select>
     <button id="joinBtn" class="primary">Join meeting</button>
     <div id="joinErr"></div>
+    <button id="adminToggle" class="adminlink" type="button">I am the admin – start a meeting</button>
     <p class="note">Up to 30 branches. Use Google Chrome on a laptop or desktop with good internet (about 4 Mbps) for the best experience and for the written record. Allow camera and microphone when asked.</p>
     <button id="dlAfter" class="primary hidden" style="margin-top:12px">Download last meeting record (Word)</button>
   </div>
@@ -152,6 +171,7 @@
       </div>
     </div>
     <div style="display:flex;gap:6px;align-items:center">
+      <span class="pill pw hidden" id="pwPill"></span>
       <span class="pill" id="count">1 branch</span>
       <span class="pill rec" id="recPill">Recording text</span>
     </div>
@@ -170,6 +190,7 @@
     <button class="ctl" id="camBtn">Camera on</button>
     <button class="ctl" id="toggleSide">Record</button>
     <button class="ctl dl" id="dlBtn">Word record</button>
+    <button class="ctl end hidden" id="endBtn">End for all</button>
     <button class="ctl leave" id="leaveBtn">Leave</button>
   </footer>
 </section>
@@ -181,12 +202,15 @@ const MEETING_NAME = "CoopMeet";
 // Change this string if you ever want a fresh, separate room.
 const ROOM_KEY = "coopmeet-room-c9f41e7a52";
 const HUB_ID = ROOM_KEY + "-hub";
+const ADMIN_SALT = "99b9c80e8bb5467597f6c8b1cb1fe647";
+const ADMIN_HASH = "61d6037408911b9760804fe85db3794764063be4bb0c4118d24f05c0b14d2bcd";   // PBKDF2-SHA256, 250000 rounds – the PIN itself is not stored here
 const MAX_BRANCHES = 30;          // room limit
 const AUTO_MUTE_AFTER = 5;        // join muted when this many are already in
 
 /* ---------- State ---------- */
 const $ = id => document.getElementById(id);
-let me = { branch: "", id: null, lang: "en-IN" };
+let me = { branch: "", id: null, lang: "en-IN", password: "", isAdmin: false, admitted: false };
+let adminMode = false, waitTimer = null, endedByAdmin = false;
 let localStream = null, mediaPeer = null, hubPeer = null, hubConn = null;
 let inMeeting = false, leaving = false, reconnecting = false;
 let micOn = true, camOn = true;
@@ -216,12 +240,50 @@ initPreview();
 $("branch").addEventListener("keydown", e => { if (e.key === "Enter") join(); });
 $("joinBtn").addEventListener("click", join);
 
+$("adminToggle").onclick = () => {
+  adminMode = !adminMode;
+  $("adminBox").classList.toggle("hidden", !adminMode);
+  $("pwRow").classList.toggle("hidden", adminMode);
+  $("joinBtn").textContent = adminMode ? "Start meeting" : "Join meeting";
+  $("adminToggle").textContent = adminMode ? "I am a branch – join a meeting" : "I am the admin – start a meeting";
+  $("joinErr").textContent = "";
+};
+for (const id of ["pw", "adminPin", "newPw"]) {
+  $(id).addEventListener("input", e => { e.target.value = e.target.value.replace(/\D/g, ""); });
+  $(id).addEventListener("keydown", e => { if (e.key === "Enter") join(); });
+}
+
+async function checkAdminPin(pin) {
+  try {
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(pin), "PBKDF2", false, ["deriveBits"]);
+    const salt = new Uint8Array(ADMIN_SALT.match(/../g).map(x => parseInt(x, 16)));
+    const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt, iterations: 250000 }, key, 256);
+    const hex = [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+    return hex === ADMIN_HASH;
+  } catch (e) { return false; }
+}
+
 async function join() {
+  const err = m => { $("joinErr").textContent = m; $("joinBtn").disabled = false; };
   const branch = $("branch").value.trim();
-  if (!branch) { $("joinErr").textContent = "Please type your branch name."; $("branch").focus(); return; }
-  me.branch = branch; me.lang = $("lang").value;
-  try { localStorage.setItem("coopmeet-branch", branch); localStorage.setItem("coopmeet-lang", me.lang); } catch (e) {}
+  if (!branch) { err("Please type your branch name."); $("branch").focus(); return; }
   $("joinBtn").disabled = true; $("joinErr").textContent = "";
+  if (adminMode) {
+    const pin = $("adminPin").value, pw = $("newPw").value;
+    if (!pin) { err("Type your admin PIN."); return; }
+    if (!/^\d{4,8}$/.test(pw)) { err("Set a meeting password of 4 to 8 digits."); return; }
+    $("joinErr").textContent = "Checking admin PIN…";
+    if (!(await checkAdminPin(pin))) { err("Admin PIN is not correct."); return; }
+    me.isAdmin = true; me.password = pw;
+  } else {
+    const pw = $("pw").value;
+    if (!/^\d{4,8}$/.test(pw)) { err("Type the meeting password the admin gave you (numbers only)."); $("pw").focus(); return; }
+    me.isAdmin = false; me.password = pw;
+  }
+  me.branch = branch; me.lang = $("lang").value; me.admitted = false; endedByAdmin = false;
+  try { localStorage.setItem("coopmeet-branch", branch); localStorage.setItem("coopmeet-lang", me.lang); } catch (e) {}
+  $("joinErr").textContent = "";
   if (!localStream) await initPreview();
   if (!localStream) localStream = new MediaStream();
 
@@ -232,21 +294,36 @@ async function join() {
   $("grid").innerHTML = ""; $("lines").innerHTML = "";
   addTile("me", localStream, branch + " (you)", true);
   updateButtons();
+  $("pwPill").classList.toggle("hidden", !me.isAdmin);
+  $("pwPill").textContent = "Password " + me.password;
+  $("endBtn").classList.add("hidden");
 
   mediaPeer = new Peer({ debug: 1 });
   mediaPeer.on("open", async id => {
     me.id = id;
-    setStatus("Joining room…");
-    await tryHub();
+    if (me.isAdmin) {
+      setStatus("Starting meeting…");
+      const started = await tryHub();
+      if (started) $("endBtn").classList.remove("hidden");
+      else flash("A meeting is already running. Joining it with the password you typed.");
+    } else setStatus("Joining…");
     connectHub(false);
-    startSpeech();
   });
   mediaPeer.on("call", call => {
-    call.answer(localStream);
-    wireCall(call);
+    // Only answer video calls from branches that the meeting has admitted.
+    let tries = 0;
+    const tryAnswer = () => {
+      if (leaving) return;
+      if (me.admitted && roster.has(call.peer)) { call.answer(localStream); wireCall(call); }
+      else if (++tries < 20) setTimeout(tryAnswer, 250);
+      else try { call.close(); } catch (e) {}
+    };
+    tryAnswer();
   });
   mediaPeer.on("error", e => {
-    if (e.type === "peer-unavailable" && String(e.message).includes(HUB_ID)) onHubLost();
+    if (e.type === "peer-unavailable" && String(e.message).includes(HUB_ID)) {
+      if (me.admitted) onHubLost(); else waitForAdmin();
+    }
     else if (e.type === "network" || e.type === "server-error") setStatus("Network problem — retrying…");
     else console.warn("peer error", e.type, e);
   });
@@ -256,7 +333,7 @@ async function join() {
 /* ---------- Hub (roster + shared record) ----------
    The first person in the room holds the fixed HUB_ID. If they leave,
    someone else takes over automatically. Video goes peer-to-peer. */
-const hub = { members: new Map(), conns: new Map(), log: new Map() };
+const hub = { members: new Map(), conns: new Map(), log: new Map(), password: "" };
 
 function tryHub() {
   return new Promise(resolve => {
@@ -271,7 +348,7 @@ function tryHub() {
 }
 
 function setupHub(p) {
-  hub.members.clear(); hub.conns.clear(); hub.log = new Map(log);
+  hub.members.clear(); hub.conns.clear(); hub.log = new Map(log); hub.password = me.password;
   p.on("connection", c => {
     c.on("data", m => hubHandle(c, m));
     c.on("close", () => hubDrop(c.peer));
@@ -291,6 +368,9 @@ function hubAddLine(line) {
 function hubHandle(c, m) {
   if (!m || typeof m !== "object") return;
   if (m.type === "join") {
+    if (String(m.password || "") !== hub.password) {
+      c.send({ type: "denied" }); setTimeout(() => c.close(), 500); return;
+    }
     if (!m.rejoin && !hub.members.has(c.peer) && hub.members.size >= MAX_BRANCHES) {
       c.send({ type: "full" }); setTimeout(() => c.close(), 500); return;
     }
@@ -301,7 +381,7 @@ function hubHandle(c, m) {
     c.send({ type: "welcome", roster: hubRoster(), lines: [...hub.log.values()] });
     hubBroadcast({ type: "roster", roster: hubRoster() });
     if (!m.rejoin) hubAddLine({ id: "sys-" + c.peer + "-" + Date.now(), t: Date.now(), branch, text: "joined the meeting", kind: "sys" });
-  } else if (m.type === "line" && m.line && m.line.id) {
+  } else if (m.type === "line" && m.line && m.line.id && hub.members.has(c.peer)) {
     const l = m.line;
     hubAddLine({ id: String(l.id), t: +l.t || Date.now(), branch: String(l.branch).slice(0, 60),
                  text: String(l.text).slice(0, 2000), kind: l.kind === "sys" ? "sys" : "speech" });
@@ -323,16 +403,24 @@ function connectHub(rejoin) {
   c.on("open", () => {
     hubConn = c;
     setStatus("Connected · " + MEETING_NAME);
-    c.send({ type: "join", branch: me.branch, rejoin, lines: [...log.values()] });
+    c.send({ type: "join", branch: me.branch, password: me.password, rejoin, lines: me.admitted ? [...log.values()] : [] });
   });
   c.on("data", onHubMsg);
   c.on("close", () => { if (hubConn === c) onHubLost(); });
   c.on("error", () => { if (hubConn === c) onHubLost(); });
 }
 
+function waitForAdmin() {
+  if (leaving || me.admitted) return;
+  setStatus("Waiting for the admin to start the meeting…");
+  clearTimeout(waitTimer);
+  waitTimer = setTimeout(() => connectHub(false), 5000);
+}
+
 function onHubLost() {
   hubConn = null;
-  if (leaving || reconnecting) return;
+  if (leaving || reconnecting || endedByAdmin) return;
+  if (!me.admitted) { waitForAdmin(); return; }
   reconnecting = true;
   setStatus("Reconnecting…");
   setTimeout(async () => {
@@ -345,7 +433,13 @@ function onHubLost() {
 
 function onHubMsg(m) {
   if (!m || typeof m !== "object") return;
-  if (m.type === "welcome") {
+  if (m.type === "denied") {
+    leave("Wrong meeting password. Ask the admin for this meeting's password."); return;
+  } else if (m.type === "ended") {
+    endedByAdmin = true;
+    leave("The admin has ended the meeting. You can download the Word record below."); return;
+  } else if (m.type === "welcome") {
+    if (!me.admitted) { me.admitted = true; startSpeech(); }
     (m.lines || []).forEach(addLine);
     if (firstWelcome && micOn && (m.roster || []).length > AUTO_MUTE_AFTER) {
       setMic(false);
@@ -354,8 +448,7 @@ function onHubMsg(m) {
     firstWelcome = false;
     setRoster(m.roster);
   } else if (m.type === "full") {
-    alert("The meeting is full (" + MAX_BRANCHES + " branches). Please try again later.");
-    leave(); return;
+    leave("The meeting is full (" + MAX_BRANCHES + " branches). Please try again later."); return;
   } else if (m.type === "roster") setRoster(m.roster);
   else if (m.type === "line") addLine(m.line);
 }
@@ -497,7 +590,7 @@ let rec = null, srBlocked = false;
 function startSpeech() {
   if (!SR) { $("recPill").textContent = "No speech-to-text here"; $("recPill").classList.remove("rec");
     $("interim").textContent = "This browser can't convert speech to text. Others' words are still recorded."; return; }
-  if (rec || !micOn || !inMeeting || srBlocked) return;
+  if (rec || !micOn || !inMeeting || !me.admitted || srBlocked) return;
   rec = new SR();
   rec.lang = me.lang; rec.continuous = true; rec.interimResults = true;
   rec.onresult = e => {
@@ -636,13 +729,20 @@ $("micBtn").onclick = () => setMic(!micOn);
 $("camBtn").onclick = () => { camOn = !camOn; localStream.getVideoTracks().forEach(t => t.enabled = camOn); updateButtons(); };
 $("toggleSide").onclick = () => $("side").classList.toggle("closed");
 $("dlBtn").onclick = downloadDocx;
+$("endBtn").onclick = () => {
+  if (!confirm("End the meeting for all branches? Download the Word record first if you need it.")) return;
+  endedByAdmin = true;
+  hubBroadcast({ type: "ended" });
+  setTimeout(() => leave("You ended the meeting."), 600);
+};
 $("dlAfter").onclick = downloadDocx;
 $("leaveBtn").onclick = () => {
   if (!confirm("Leave the meeting? Download the Word record first if you need it.")) return;
   leave();
 };
-function leave() {
-  leaving = true; inMeeting = false; stopSpeech();
+function leave(msg) {
+  leaving = true; inMeeting = false; stopSpeech(); clearTimeout(waitTimer);
+  me.admitted = false;
   for (const id of [...meters.keys()]) unwatch(id); spotId = null;
   for (const c of calls.values()) try { c.close(); } catch (e) {}
   calls.clear();
@@ -652,6 +752,7 @@ function leave() {
   hubConn = null; mediaPeer = null; hubPeer = null;
   $("meet").classList.add("hidden"); $("join").classList.remove("hidden");
   $("joinBtn").disabled = false;
+  $("joinErr").textContent = msg || "";
   $("dlAfter").classList.toggle("hidden", log.size === 0);
   $("preview").srcObject = localStream;
 }
