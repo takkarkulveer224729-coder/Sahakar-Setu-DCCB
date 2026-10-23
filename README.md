@@ -63,6 +63,13 @@ this once, before you share the link.
 
 **Turn the public link off:** run `tailscale funnel reset` in an administrator window.
 
+**Link shows "This site can't be reached" / `ERR_CONNECTION_CLOSED`?** Double-click
+**`check-online.bat`** on the server PC. It checks Coop Connect, Tailscale, the https
+certificate, Funnel and whether the internet can find your link, then fixes what it can and
+tells you exactly what to do for the rest. Right after Funnel is first turned on, allow
+10–15 minutes for the certificate and the link name to be ready. On phones, test with
+Wi-Fi off, in Google Chrome, with "Private DNS" and any VPN/ad-blocker turned off.
+
 **Just a quick test?** `start-quick-link.bat` (or `./start-quick-link.sh`) gives a
 temporary `trycloudflare.com` link with no sign-in, but it changes on every start.
 
