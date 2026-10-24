@@ -32,6 +32,10 @@ const COOKIE = 'cc_session';
 const USERNAME_RE = /^[a-z0-9._]{3,20}$/;
 const RING_TIMEOUT_MS = 45000;
 
+// Report status: chosen in Profile (max 3) and shown only to the users the owner picks.
+const REPORT_OPTIONS = ['229-217-314', '229,217-314', '314 downloaded many times..', '414 downloaded'];
+const MAX_REPORTS = 3;
+
 // Calls go directly between browsers (WebRTC). STUN lets them find each other; a TURN
 // relay is only needed on strict networks (some mobile data / office firewalls).
 const ICE_SERVERS = [{ urls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',') }];
@@ -239,6 +243,23 @@ function emitToChat(chatId, event, payload) {
   for (const uid of chatMembers(chatId)) emitToUser(uid, event, payload);
 }
 
+// Report status items this viewer may see for a user ([] if none / not allowed).
+function reportFor(owner, viewerId) {
+  const r = owner.reportStatus;
+  if (!r || !r.items.length) return [];
+  return owner.id === viewerId || r.visibleTo.includes(viewerId) ? r.items : [];
+}
+
+// Report statuses of everyone that this viewer is allowed to see.
+function reportsVisibleTo(viewerId) {
+  const out = {};
+  for (const u of Object.values(db.users)) {
+    const items = reportFor(u, viewerId);
+    if (items.length && u.id !== viewerId) out[u.id] = items;
+  }
+  return out;
+}
+
 function broadcastPresence(userId) {
   const u = db.users[userId];
   if (u) io.emit('presence', publicUser(u));
@@ -442,6 +463,10 @@ io.on('connection', (socket) => {
     users: Object.values(db.users).map(publicUser),
     chats: userChats(me),
     iceServers: ICE_SERVERS,
+    myReport: db.users[me].reportStatus || { items: [], visibleTo: [] },
+    reportOptions: REPORT_OPTIONS,
+    maxReports: MAX_REPORTS,
+    reports: reportsVisibleTo(me),
   });
 
   socket.on('profile:update', ({ about } = {}, ack = () => {}) => {
@@ -450,6 +475,22 @@ io.on('connection', (socket) => {
     save();
     broadcastPresence(me);
     ack({ ok: true });
+  });
+
+  socket.on('report:update', ({ items, visibleTo } = {}, ack = () => {}) => {
+    const chosen = [...new Set(Array.isArray(items) ? items.map(String) : [])];
+    if (chosen.some((i) => !REPORT_OPTIONS.includes(i))) return ack({ error: 'Unknown report status' });
+    if (chosen.length > MAX_REPORTS) return ack({ error: `You can select at most ${MAX_REPORTS} report statuses` });
+    const viewers = [...new Set(Array.isArray(visibleTo) ? visibleTo : [])].filter((id) => isUser(id) && id !== me);
+    const user = db.users[me];
+    const before = user.reportStatus ? user.reportStatus.visibleTo : [];
+    user.reportStatus = { items: chosen, visibleTo: viewers };
+    save();
+    // Tell only the people involved: new viewers get the items, removed viewers get nothing.
+    for (const id of new Set([...before, ...viewers])) {
+      emitToUser(id, 'report:status', { userId: me, items: reportFor(user, id) });
+    }
+    ack({ ok: true, report: user.reportStatus });
   });
 
   socket.on('chat:open', ({ peerId, chatId } = {}, ack = () => {}) => {

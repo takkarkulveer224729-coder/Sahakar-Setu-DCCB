@@ -26,6 +26,8 @@ network: office LAN, home Wi-Fi or mobile data.
 - **Chat menu (⋮):** contact/group info, **clear chat** (empties it for you only), **delete chat**, exit group
 - **Extras:** an emoji picker, clickable links, unread counts, search and desktop notifications
 - **About (status):** WhatsApp-style moods like 🟢 Available, 🤝 In a meeting, 🚜 On field visit, or your own text with emojis. Tap a chat's name to see someone's About
+- **Report status:** under About in Profile, pick up to 3 of: `229-217-314`, `229,217-314`, `314 downloaded many times..`, `414 downloaded`
+  - Tick exactly which people may see it; only they see it in your Contact info (enforced by the server, updates instantly)
 - **Look:** professional design in the Coop Connect brand colours: split-screen sign-in, All / Unread / Groups filters, light and dark theme, and a layout that also works on phones
 
 ## 1. Try it on one PC or office network

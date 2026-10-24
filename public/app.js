@@ -233,6 +233,10 @@
     state.users = new Map(data.users.map((u) => [u.id, u]));
     state.chats = new Map(data.chats.map((c) => [c.id, c]));
     state.iceServers = data.iceServers || [];
+    state.myReport = data.myReport || { items: [], visibleTo: [] };
+    state.reportOptions = data.reportOptions || [];
+    state.maxReports = data.maxReports || 3;
+    state.reports = new Map(Object.entries(data.reports || {}));
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
     const myAv = $('#my-avatar');
@@ -500,6 +504,93 @@
     return box;
   }
 
+  // Report status: pick up to maxReports options and choose exactly who may see them.
+  function reportEditor() {
+    const chosen = new Set(state.myReport.items);
+    const viewers = new Set(state.myReport.visibleTo);
+    const optionsBox = el('div', { class: 'report-options' });
+    const count = el('span', { class: 'report-count' });
+    const peopleBox = el('div', { class: 'report-people' });
+    const whoSummary = el('div', { class: 'report-who muted small' });
+    const search = el('input', { class: 'report-search', placeholder: 'Search people…', autocomplete: 'off' });
+    const people = () => [...state.users.values()].filter((u) => u.id !== state.me.id).sort((a, b) => a.name.localeCompare(b.name));
+
+    const renderOptions = () => {
+      const full = chosen.size >= state.maxReports;
+      count.textContent = `${chosen.size}/${state.maxReports} selected`;
+      count.classList.toggle('full', full);
+      optionsBox.replaceChildren(...state.reportOptions.map((opt) => {
+        const on = chosen.has(opt);
+        return el('button', {
+          type: 'button',
+          class: 'report-option' + (on ? ' selected' : ''),
+          'aria-pressed': on ? 'true' : 'false',
+          disabled: !on && full ? 'disabled' : null,
+          title: !on && full ? `You can select at most ${state.maxReports}` : null,
+          onclick: () => { if (on) chosen.delete(opt); else chosen.add(opt); renderOptions(); },
+        }, el('span', { class: 'report-check' }, on ? '✓' : ''), el('span', {}, opt));
+      }));
+    };
+
+    const renderPeople = () => {
+      const q = search.value.trim().toLowerCase();
+      const list = people().filter((u) => !q || u.name.toLowerCase().includes(q) || u.username.includes(q));
+      peopleBox.replaceChildren(...(list.length ? list.map((u) => {
+        const cb = el('input', { type: 'checkbox' });
+        cb.checked = viewers.has(u.id);
+        cb.addEventListener('change', () => { if (cb.checked) viewers.add(u.id); else viewers.delete(u.id); renderWho(); });
+        return el('label', { class: 'report-person' }, cb, avatar(u.name, u.color), el('span', { class: 'rp-name' }, u.name, el('small', {}, '@' + u.username)));
+      }) : [el('div', { class: 'empty-list' }, q ? 'Nobody matches your search' : 'Nobody else has joined yet.')]));
+    };
+
+    const renderWho = () => {
+      const names = people().filter((u) => viewers.has(u.id)).map((u) => u.name);
+      whoSummary.textContent = names.length
+        ? `Visible only to: ${names.slice(0, 4).join(', ')}${names.length > 4 ? ` +${names.length - 4} more` : ''}`
+        : 'Not visible to anyone yet — tick the people below.';
+    };
+
+    search.addEventListener('input', renderPeople);
+    renderOptions();
+    renderPeople();
+    renderWho();
+
+    const save = el('button', { class: 'btn-primary', onclick: () => {
+      save.disabled = true;
+      socket.emit('report:update', { items: [...chosen], visibleTo: [...viewers] }, (res) => {
+        save.disabled = false;
+        if (res.error) return toast(res.error);
+        state.myReport = res.report;
+        if (!res.report.items.length) toast('Report status cleared');
+        else if (!res.report.visibleTo.length) toast('Saved — but nobody is selected to see it yet');
+        else toast(`Report status saved — visible to ${res.report.visibleTo.length} ${res.report.visibleTo.length === 1 ? 'person' : 'people'} only`);
+      });
+    } }, 'Save report status');
+
+    return el('div', { class: 'report-editor' },
+      el('div', { class: 'field' },
+        el('div', { class: 'report-head' }, el('label', {}, 'Report status'), count),
+        el('div', { class: 'muted small report-hint' }, `Choose up to ${state.maxReports}. Only the people you tick below can see it.`),
+        optionsBox,
+      ),
+      el('div', { class: 'field' },
+        el('label', {}, 'Show to'),
+        whoSummary,
+        el('div', { class: 'report-tools' },
+          search,
+          el('button', { type: 'button', class: 'chip', onclick: () => { for (const u of people()) viewers.add(u.id); renderPeople(); renderWho(); } }, 'All'),
+          el('button', { type: 'button', class: 'chip', onclick: () => { viewers.clear(); renderPeople(); renderWho(); } }, 'None'),
+        ),
+        peopleBox,
+      ),
+      el('div', { class: 'actions' }, save),
+    );
+  }
+
+  function reportBadges(items) {
+    return el('div', { class: 'report-badges' }, items.map((i) => el('span', { class: 'report-badge' }, i)));
+  }
+
   $('#my-avatar').addEventListener('click', () => {
     const current = el('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
     const next = el('input', { type: 'password', placeholder: 'New password (min 6 characters)', autocomplete: 'new-password' });
@@ -510,6 +601,7 @@
         el('div', { style: 'font-size:17px' }, state.me.name),
         el('div', { class: 'username' }, '@' + state.me.username)),
       aboutEditor(),
+      reportEditor(),
       el('div', { class: 'field pw-form' }, el('label', {}, 'Change password'), current, next, next2),
       el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: async () => {
         if (next.value !== next2.value) return toast('New passwords do not match');
@@ -549,6 +641,10 @@
       el('div', { class: 'info-name' }, u.name),
       el('div', { class: 'info-sub' }, '@' + u.username + (u.id !== state.me.id ? ' · ' + lastSeen(u) : '')),
       el('div', { class: 'field' }, el('label', {}, 'About'), el('div', { class: 'info-about' }, u.about || '—')),
+      (() => {
+        const items = u.id === state.me.id ? state.myReport.items : state.reports.get(u.id) || [];
+        return items.length ? el('div', { class: 'field' }, el('label', {}, 'Report status'), reportBadges(items)) : null;
+      })(),
     ]);
   }
   $('.conv-header').addEventListener('click', (e) => {
@@ -1525,6 +1621,14 @@
     else map.delete(userId);
     renderChatList();
     if (state.current && state.current.id === chatId) renderHeader();
+  });
+
+  socket.on('report:status', ({ userId, items }) => {
+    if (items.length) state.reports.set(userId, items);
+    else state.reports.delete(userId);
+    // Refresh Contact info if it's open for this person.
+    if ($('#panel').classList.contains('open') && $('#panel-title').textContent === 'Contact info'
+      && state.current && state.current.peer === userId) showChatInfo();
   });
 
   socket.on('presence', (u) => {

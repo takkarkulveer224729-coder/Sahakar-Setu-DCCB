@@ -1060,3 +1060,81 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
   .ws-stage { aspect-ratio: 3 / 4; }
   .ws-controls { gap: 24px; }
 }
+
+/* ---------- Report status ---------- */
+.report-editor { border-top: 1px solid var(--border); margin-top: 6px; padding-top: 4px; }
+.report-head { display: flex; align-items: center; justify-content: space-between; }
+.report-head label { margin-bottom: 0 !important; }
+.report-count {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--active);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+.report-count.full { color: #fff; background: var(--accent); }
+.report-hint { margin: 6px 0 10px; }
+.report-options { display: grid; gap: 8px; }
+.report-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  cursor: pointer;
+  font-weight: 600;
+  transition: border-color 0.12s, background 0.12s;
+}
+.report-option:hover:not(:disabled) { border-color: var(--accent); }
+.report-option.selected { border-color: var(--accent); background: var(--active); color: var(--accent); }
+.report-option:disabled { opacity: 0.45; cursor: not-allowed; }
+.report-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  border: 2px solid var(--border);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+.report-option.selected .report-check { background: var(--accent); border-color: var(--accent); color: #fff; }
+.report-who { margin: -2px 0 10px; }
+.report-tools { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
+.panel-body .field .report-search { flex: 1; padding: 8px 12px; font-size: 14px; }
+.report-people { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px; }
+.report-person { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.report-person:hover { background: var(--hover); }
+.report-person input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+.report-person .avatar { width: 32px; height: 32px; font-size: 12px; }
+.rp-name { display: flex; flex-direction: column; font-weight: 600; font-size: 14px; min-width: 0; }
+.rp-name small { color: var(--muted); font-weight: 400; font-size: 12px; }
+.report-people .empty-list { padding: 16px; }
+.report-badges { display: flex; flex-wrap: wrap; gap: 8px; }
+.report-badge {
+  background: var(--active);
+  color: var(--accent);
+  border: 1px solid var(--brand-100);
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-weight: 700;
+  font-size: 13.5px;
+}
+@media (prefers-color-scheme: dark) { .report-badge { border-color: transparent; } }
+/* People rows are <label>s inside a Profile field: undo the field heading/input styles. */
+.panel-body .field label.report-person {
+  display: flex;
+  margin: 0;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.panel-body .field .report-person input[type=checkbox] { width: 18px; height: 18px; padding: 0; border: 0; box-shadow: none; }
