@@ -51,10 +51,11 @@ So you are told before anything costs money:
 3. Click **Create**. The price shown on the right is Google's normal price. The Always Free
    allowance is taken off your bill afterwards.
 
-> **About cost:** the e2-micro server, 30 GB standard disk and 1 GB of data a month are covered
-> by Google's free tier. Google may also charge a small amount for the server's public internet
-> address (about $0.005 an hour, roughly ₹300 a month at most). Your spending alert from step 2
-> tells you if this applies. Check **Billing → Reports** after a few days.
+> **About cost:** Google's free tier covers the e2-micro server, its internet address, the 30 GB
+> standard disk and **1 GB of data sent to users per month**, so the expected cost is **₹0**.
+> Only data above 1 GB a month is charged (roughly ₹10–12 per extra GB plus GST), which mainly
+> happens if many photos, videos or large files are shared. Your spending alert from step 2 warns
+> you. Check **Billing → Reports** after the first week. It should show ₹0.
 
 ## Step 4: On the old PC, pack your data and switch it off
 
