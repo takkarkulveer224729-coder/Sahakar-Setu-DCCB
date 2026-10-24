@@ -149,7 +149,6 @@
     if (m.deleted) return '🚫 This message was deleted';
     if (m.call) return callLabel(m);
     if (m.websnap && m.file) return `📸 WebSnap${m.text ? ': ' + m.text : ''}`;
-    if (m.youtube) return `▶ Ytmood: ${m.text || m.youtube.title || 'YouTube video'}`;
     if (m.file) {
       const icon = m.file.mime.startsWith('image/') ? '📷' : m.file.mime.startsWith('video/') ? '🎥' : m.file.mime.startsWith('audio/') ? '🎵' : '📄';
       return `${icon} ${m.text || m.file.name}`;
@@ -655,15 +654,11 @@
       if (m.reply) {
         node.append(el('div', { class: 'quote', onclick: () => jumpTo(m.reply.id) },
           el('div', { class: 'q-name' }, userName(m.reply.from)),
-          el('div', { class: 'q-text' }, m.reply.text || (m.reply.fileName ? (m.reply.fileName.startsWith('▶') ? '' : '📎 ') + m.reply.fileName : '')),
+          el('div', { class: 'q-text' }, m.reply.text || (m.reply.fileName ? '📎 ' + m.reply.fileName : '')),
         ));
       }
       if (m.websnap && m.file) node.append(el('div', { class: 'websnap-tag', title: 'Photo taken live with WebSnap' }, '📸 WebSnap'));
       if (m.file) node.append(fileNode(m.file));
-      if (m.youtube) {
-        node.classList.add('yt-msg');
-        node.append(el('div', { class: 'ytmood-tag' }, '▶ Ytmood'), youtubeNode(m.youtube));
-      }
       if (m.text) node.append(el('span', { class: 'text' }, linkify(m.text)));
     }
     node.append(el('button', { class: 'menu-btn', title: 'Message options', onclick: (e) => showMsgMenu(e, m) }, '▼'));
@@ -1421,110 +1416,6 @@
     if (e.key === 'Escape') closeWebSnap();
     else if (e.key === ' ' && !$('#ws-live').classList.contains('hidden')) { e.preventDefault(); takeSnap(); }
   });
-
-  // ---------- Ytmood: share a YouTube video ----------
-
-  const yt = { chatId: null, url: null, timer: null, seq: 0 };
-
-  function ytThumb(id) { return `https://i.ytimg.com/vi/${encodeURIComponent(id)}/hqdefault.jpg`; }
-  function ytWatchUrl(v) { return `https://www.youtube.com/watch?v=${encodeURIComponent(v.id)}${v.start ? '&t=' + v.start + 's' : ''}`; }
-
-  function openYtmood() {
-    if (!state.current) return;
-    yt.chatId = state.current.id;
-    yt.url = null;
-    $('#yt-to').textContent = 'Share a YouTube video with ' + chatTitle(state.current);
-    $('#yt-url').value = '';
-    $('#yt-caption').value = '';
-    $('#yt-preview').classList.add('hidden');
-    $('#yt-status').textContent = 'Copy a video\'s link from YouTube (Share → Copy link) and paste it here.';
-    $('#yt-status').classList.remove('error');
-    $('#yt-send').disabled = true;
-    $('#ytmood').classList.remove('hidden');
-    $('#yt-url').focus();
-  }
-  const closeYtmood = () => $('#ytmood').classList.add('hidden');
-
-  function lookupYt() {
-    const url = $('#yt-url').value.trim();
-    const seq = ++yt.seq;
-    yt.url = null;
-    $('#yt-send').disabled = true;
-    if (!url) {
-      $('#yt-preview').classList.add('hidden');
-      return;
-    }
-    $('#yt-status').textContent = 'Checking link…';
-    $('#yt-status').classList.remove('error');
-    socket.emit('yt:lookup', { url }, (res) => {
-      if (seq !== yt.seq) return; // a newer link was typed meanwhile
-      if (res.error) {
-        $('#yt-preview').classList.add('hidden');
-        $('#yt-status').textContent = res.error;
-        $('#yt-status').classList.add('error');
-        return;
-      }
-      const v = res.video;
-      yt.url = url;
-      $('#yt-thumb').src = ytThumb(v.id);
-      $('#yt-vtitle').textContent = v.title || 'YouTube video';
-      $('#yt-vauthor').textContent = (v.author || 'YouTube') + (v.start ? ` · starts at ${fmtDuration(v.start)}` : '');
-      $('#yt-preview').classList.remove('hidden');
-      $('#yt-status').textContent = '✓ Ready to send';
-      $('#yt-send').disabled = false;
-    });
-  }
-
-  function sendYtmood() {
-    if (!yt.url) return;
-    const btn = $('#yt-send');
-    btn.disabled = true;
-    socket.emit('message:send', { chatId: yt.chatId, text: $('#yt-caption').value.trim(), youtube: yt.url }, (res) => {
-      btn.disabled = false;
-      if (res.error) return toast(res.error);
-      closeYtmood();
-    });
-  }
-
-  $('#btn-ytmood').addEventListener('click', openYtmood);
-  $('#yt-close').addEventListener('click', closeYtmood);
-  $('#ytmood').addEventListener('click', (e) => { if (e.target.id === 'ytmood') closeYtmood(); });
-  $('#yt-url').addEventListener('input', () => { clearTimeout(yt.timer); yt.timer = setTimeout(lookupYt, 350); });
-  $('#yt-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(yt.timer); lookupYt(); } });
-  $('#yt-caption').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendYtmood(); } });
-  $('#yt-send').addEventListener('click', sendYtmood);
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#ytmood').classList.contains('hidden')) closeYtmood(); });
-
-  // The video card shown in the chat. Clicking it plays the video right there.
-  function youtubeNode(v) {
-    const card = el('div', { class: 'yt-card' });
-    const play = () => {
-      const src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(v.id)}?autoplay=1&rel=0${v.start ? '&start=' + v.start : ''}`;
-      card.querySelector('.yt-frame').replaceChildren(el('iframe', {
-        src,
-        title: v.title || 'YouTube video',
-        allow: 'autoplay; encrypted-media; picture-in-picture; fullscreen',
-        allowfullscreen: true,
-        // YouTube's player needs to know which site it is embedded on.
-        referrerpolicy: 'strict-origin-when-cross-origin',
-      }));
-      card.classList.add('playing');
-    };
-    card.append(
-      el('div', { class: 'yt-frame', onclick: play, title: 'Play here' },
-        el('img', { src: ytThumb(v.id), alt: v.title || 'YouTube video', loading: 'lazy' }),
-        el('span', { class: 'yt-play', 'aria-hidden': 'true' }),
-      ),
-      el('div', { class: 'yt-info' },
-        el('div', { class: 'yt-vtitle' }, v.title || 'YouTube video'),
-        el('div', { class: 'yt-sub' },
-          el('span', {}, v.author || 'YouTube'),
-          el('a', { href: ytWatchUrl(v), target: '_blank', rel: 'noopener noreferrer' }, 'Open on YouTube ↗'),
-        ),
-      ),
-    );
-    return card;
-  }
 
   // ---------- Realtime events ----------
 

@@ -170,9 +170,6 @@
           <button id="btn-websnap" class="icon-btn" title="WebSnap – take a photo with your camera">
             <svg viewBox="0 0 24 24"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4zM9 2 7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2h-3.17L15 2H9zm3 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
           </button>
-          <button id="btn-ytmood" class="icon-btn yt-btn" title="Ytmood – share a YouTube video">
-            <svg viewBox="0 0 24 24"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.76-1.77C18.27 5 12 5 12 5s-6.27 0-7.84.43A2.5 2.5 0 0 0 2.4 7.2 26 26 0 0 0 2 12a26 26 0 0 0 .4 4.8 2.5 2.5 0 0 0 1.76 1.77C5.73 19 12 19 12 19s6.27 0 7.84-.43a2.5 2.5 0 0 0 1.76-1.77A26 26 0 0 0 22 12a26 26 0 0 0-.4-4.8zM10 15V9l5.2 3L10 15z"/></svg>
-          </button>
           <input id="file-input" type="file" multiple hidden>
           <textarea id="msg-input" rows="1" placeholder="Type a message"></textarea>
           <button id="btn-send" class="icon-btn send" title="Send">
@@ -251,35 +248,6 @@
         <button id="ws-send" class="ws-send" title="Send (Enter)">
           <svg viewBox="0 0 24 24"><path d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Ytmood: share a YouTube video -->
-  <div id="ytmood" class="dialog-backdrop hidden">
-    <div class="dialog yt-dialog" role="dialog" aria-modal="true" aria-labelledby="yt-title">
-      <div class="yt-head">
-        <span class="yt-logo">▶</span>
-        <div>
-          <div id="yt-title" class="dialog-title">Ytmood</div>
-          <div id="yt-to" class="muted small"></div>
-        </div>
-        <button id="yt-close" class="icon-btn" title="Close">✕</button>
-      </div>
-      <label class="yt-label" for="yt-url">YouTube link</label>
-      <input id="yt-url" class="yt-input" placeholder="Paste a link, e.g. https://youtu.be/…" autocomplete="off" spellcheck="false">
-      <div id="yt-status" class="yt-status muted small">Copy a video's link from YouTube (Share → Copy link) and paste it here.</div>
-      <div id="yt-preview" class="yt-preview hidden">
-        <img id="yt-thumb" alt="">
-        <div class="yt-meta">
-          <div id="yt-vtitle" class="yt-vtitle"></div>
-          <div id="yt-vauthor" class="muted small"></div>
-        </div>
-      </div>
-      <input id="yt-caption" class="yt-input" placeholder="Add a caption (optional)" maxlength="1000">
-      <div class="yt-actions">
-        <a class="dialog-btn yt-find" href="https://www.youtube.com" target="_blank" rel="noopener noreferrer">Find on YouTube ↗</a>
-        <button id="yt-send" class="btn-primary" disabled>Send Ytmood</button>
       </div>
     </div>
   </div>
