@@ -197,11 +197,15 @@
       <div id="call-kind" class="call-kind"></div>
       <div id="call-name" class="call-name"></div>
       <div id="call-status" class="call-status"></div>
+      <div id="call-sharing" class="call-sharing hidden"></div>
     </div>
     <video id="call-local" class="call-local hidden" autoplay playsinline muted></video>
     <div id="call-controls" class="call-controls">
       <button id="call-camera" class="call-btn" title="Turn camera off">
         <svg viewBox="0 0 24 24"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+      </button>
+      <button id="call-screen" class="call-btn hidden" title="Share your screen">
+        <svg viewBox="0 0 24 24"><path d="M20 18c1.1 0 1.99-.9 1.99-2L22 6c0-1.11-.9-2-2-2H4c-1.11 0-2 .89-2 2v10c0 1.1.89 2 2 2H0v2h24v-2h-4zm-7-3.53v-2.19c-2.78 0-4.61.85-6 2.72.56-2.67 2.11-5.33 6-5.87V7l4 3.73-4 3.74z"/></svg>
       </button>
       <button id="call-mute" class="call-btn" title="Mute microphone">
         <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 2.99-1.34 2.99-3L15 5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 14 6.7 11H5c0 3.41 2.72 6.23 6 6.72V21h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"/></svg>
@@ -249,6 +253,33 @@
           <svg viewBox="0 0 24 24"><path d="M1.101 21.757 23.8 12.028 1.101 2.3l.011 7.912 13.623 1.816-13.623 1.817-.011 7.912z"/></svg>
         </button>
       </div>
+    </div>
+  </div>
+
+  <!-- Location sharing -->
+  <div id="loc-dialog" class="dialog-backdrop hidden">
+    <div class="dialog loc-dialog" role="dialog" aria-modal="true" aria-labelledby="loc-title">
+      <div class="loc-head">
+        <span class="loc-logo">📍</span>
+        <div>
+          <div id="loc-title" class="dialog-title">Share location</div>
+          <div id="loc-to" class="muted small"></div>
+        </div>
+        <button id="loc-close" class="icon-btn" title="Close">✕</button>
+      </div>
+      <div id="loc-map" class="loc-map-box"></div>
+      <div id="loc-status" class="muted small loc-status">Finding your location…</div>
+      <div class="loc-section">
+        <div class="loc-label">Share live location</div>
+        <div class="muted small">Your position updates in the chat while Coop Connect stays open on this device.</div>
+        <div class="loc-durations">
+          <button type="button" class="chip" data-minutes="15">15 minutes</button>
+          <button type="button" class="chip active" data-minutes="60">1 hour</button>
+          <button type="button" class="chip" data-minutes="480">8 hours</button>
+        </div>
+        <button id="loc-live" class="btn-primary" disabled>📡 Share live location</button>
+      </div>
+      <button id="loc-once" class="dialog-btn" disabled>📍 Send current location only</button>
     </div>
   </div>
 

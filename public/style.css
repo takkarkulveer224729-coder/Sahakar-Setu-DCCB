@@ -1138,3 +1138,88 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
   letter-spacing: 0;
 }
 .panel-body .field .report-person input[type=checkbox] { width: 18px; height: 18px; padding: 0; border: 0; box-shadow: none; }
+
+/* ---------- Location sharing ---------- */
+.loc-dialog { max-width: 460px; display: flex; flex-direction: column; gap: 12px; }
+.loc-head { display: flex; align-items: center; gap: 12px; }
+.loc-head .icon-btn { margin-left: auto; }
+.loc-head .dialog-title { margin: 0; }
+.loc-logo { width: 42px; height: 42px; border-radius: 12px; background: var(--active); display: flex; align-items: center; justify-content: center; font-size: 22px; flex-shrink: 0; }
+.loc-map-box { border-radius: 12px; overflow: hidden; background: var(--panel-2); min-height: 170px; border: 1px solid var(--border); }
+.loc-map-box:empty { display: none; }
+.loc-finding { height: 170px; display: flex; align-items: center; justify-content: center; gap: 10px; color: var(--muted); }
+.loc-spinner { width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid var(--border); border-top-color: var(--accent); animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loc-status.error { color: var(--danger); }
+.loc-section { border: 1px solid var(--border); background: var(--panel-2); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.loc-label { font-weight: 700; }
+.loc-durations { display: flex; gap: 8px; flex-wrap: wrap; }
+.loc-dialog .dialog-btn, .loc-dialog .btn-primary { width: 100%; }
+
+.loc-map { position: relative; height: 170px; overflow: hidden; background: #e8ece9; }
+.loc-map .tile { position: absolute; width: 256px; height: 256px; max-width: none; user-select: none; pointer-events: none; }
+.loc-pin {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 26px;
+  height: 26px;
+  margin: -26px 0 0 -13px;
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  background: var(--danger);
+  border: 3px solid #fff;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+}
+.loc-map.live .loc-pin { background: var(--people-blue); }
+.loc-map.live::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border-radius: 50%;
+  background: rgba(29, 155, 240, 0.35);
+  animation: loc-pulse 1.8s ease-out infinite;
+}
+@keyframes loc-pulse { from { transform: scale(0.6); opacity: 1; } to { transform: scale(4); opacity: 0; } }
+.loc-attr { position: absolute; right: 4px; bottom: 3px; font-size: 9.5px; color: #333; background: rgba(255, 255, 255, 0.75); padding: 0 4px; border-radius: 3px; }
+
+.msg.loc-msg { width: 320px; }
+.loc-card { border-radius: 10px; overflow: hidden; background: rgba(15, 31, 24, 0.05); margin-bottom: 4px; }
+.loc-map-link { display: block; }
+.loc-card.ended .loc-map { filter: grayscale(1); opacity: 0.7; }
+.loc-info { padding: 8px 10px 10px; }
+.loc-title { font-weight: 700; font-size: 14.5px; }
+.loc-card.active .loc-title { color: var(--people-blue); }
+.loc-card.ended .loc-title { color: var(--muted); }
+.loc-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.loc-actions { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 6px; font-size: 12.5px; }
+.loc-actions a { color: var(--people-blue); text-decoration: none; }
+.loc-actions a:hover { text-decoration: underline; }
+.loc-stop { border: 0; background: var(--danger); color: #fff; font-weight: 700; font-size: 12px; border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.loc-stop:hover { background: #b8222e; }
+@media (max-width: 760px) { .msg.loc-msg { width: 86%; } }
+
+/* ---------- Screen sharing in calls ---------- */
+.call-btn.on { background: var(--people-blue); }
+.call-btn.on:hover { background: #1585d0; }
+.call-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.call.remote-screen .call-remote { opacity: 1 !important; }
+.call.remote-screen .call-face { display: none; }
+.call-local.screen { transform: none; object-fit: contain; background: #000; }
+.call-sharing {
+  margin-top: 10px;
+  display: inline-block;
+  background: rgba(29, 155, 240, 0.9);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  text-shadow: none;
+}
+/* During a call, show messages above the call buttons. */
+.call:not(.hidden) ~ .toast { bottom: 130px; }

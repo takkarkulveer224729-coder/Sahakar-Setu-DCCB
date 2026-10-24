@@ -36,6 +36,18 @@ const RING_TIMEOUT_MS = 45000;
 const REPORT_OPTIONS = ['229-217-314', '229,217-314', '314 downloaded many times..', '414 downloaded'];
 const MAX_REPORTS = 3;
 
+// Location sharing: one-off "current location" or live location for a limited time.
+const LIVE_DURATIONS_MIN = [15, 60, 480];
+
+// Returns a clean {lat, lng, acc} or null if the numbers are not a real position.
+function cleanPosition({ lat, lng, accuracy } = {}) {
+  lat = Number(lat);
+  lng = Number(lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  const acc = Number.isFinite(Number(accuracy)) ? Math.min(Math.max(Math.round(Number(accuracy)), 0), 100000) : null;
+  return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc };
+}
+
 // Calls go directly between browsers (WebRTC). STUN lets them find each other; a TURN
 // relay is only needed on strict networks (some mobile data / office firewalls).
 const ICE_SERVERS = [{ urls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302,stun:stun1.l.google.com:19302').split(',') }];
@@ -289,7 +301,7 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => res.setHeader('Content-Security-Policy',
-    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'"),
+    "default-src 'self'; img-src 'self' data: blob: https://tile.openstreetmap.org; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'"),
 }));
 app.use('/api', express.json({ limit: '10kb' }));
 
@@ -464,6 +476,11 @@ io.on('connection', (socket) => {
     chats: userChats(me),
     iceServers: ICE_SERVERS,
     myReport: db.users[me].reportStatus || { items: [], visibleTo: [] },
+    // Live locations this user is still sharing, so a reloaded page can carry on updating them.
+    myLiveLocations: Object.entries(db.messages).flatMap(([chatId, msgs]) => canAccess(me, chatId)
+      ? msgs.filter((m) => m.from === me && m.location && m.location.live && !m.location.ended && m.location.expiresAt > Date.now())
+        .map((m) => ({ chatId, messageId: m.id, expiresAt: m.location.expiresAt }))
+      : []),
     reportOptions: REPORT_OPTIONS,
     maxReports: MAX_REPORTS,
     reports: reportsVisibleTo(me),
@@ -528,7 +545,7 @@ io.on('connection', (socket) => {
     ack({ ok: true });
   });
 
-  socket.on('message:send', ({ chatId, peerId, text, file, replyTo, websnap } = {}, ack = () => {}) => {
+  socket.on('message:send', ({ chatId, peerId, text, file, replyTo, websnap, location } = {}, ack = () => {}) => {
     if (!me) return ack({ error: 'Not logged in' });
     if (isUser(peerId)) chatId = dmId(me, peerId);
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
@@ -540,21 +557,69 @@ io.on('connection', (socket) => {
       if (!f.chats.includes(chatId)) f.chats.push(chatId);
       attachment = { id: f.id, name: f.name, size: f.size, mime: f.mime, url: '/uploads/' + f.id };
     }
-    if (!text.trim() && !attachment) return ack({ error: 'Empty message' });
+    let place = null;
+    if (location) {
+      const pos = cleanPosition(location);
+      if (!pos) return ack({ error: 'That location is not valid' });
+      const now = Date.now();
+      place = { ...pos, live: !!location.live, startedAt: now, updatedAt: now };
+      if (place.live) {
+        const minutes = Number(location.minutes);
+        if (!LIVE_DURATIONS_MIN.includes(minutes)) return ack({ error: 'Choose 15 minutes, 1 hour or 8 hours' });
+        place.expiresAt = now + minutes * 60000;
+        place.ended = false;
+      }
+    }
+    if (!text.trim() && !attachment && !place) return ack({ error: 'Empty message' });
     let reply = null;
     if (replyTo) {
       const orig = (db.messages[chatId] || []).find((m) => m.id === replyTo);
       if (orig && !orig.deleted) {
-        reply = { id: orig.id, from: orig.from, text: orig.text.slice(0, 200), fileName: orig.file && orig.file.name };
+        const fileName = orig.file ? orig.file.name : orig.location ? (orig.location.live ? '📍 Live location' : '📍 Location') : null;
+        reply = { id: orig.id, from: orig.from, text: orig.text.slice(0, 200), fileName };
       }
     }
     // WebSnap = a photo taken live with the sender's camera inside Coop Connect.
     websnap = !!websnap && !!attachment && attachment.mime.startsWith('image/');
-    const msg = addMessage(chatId, { from: me, text, file: attachment, reply, websnap });
+    const msg = addMessage(chatId, { from: me, text, file: attachment, reply, websnap, location: place });
     ack({ ok: true, message: msg });
   });
 
   // Delete for everyone: only your own messages. The text, file and any quotes of it disappear.
+  function ownLiveLocation(chatId, messageId) {
+    if (!canAccess(me, chatId)) return null;
+    const m = (db.messages[chatId] || []).find((x) => x.id === messageId);
+    if (!m || m.from !== me || !m.location || !m.location.live || m.location.ended) return null;
+    return m;
+  }
+
+  socket.on('location:update', ({ chatId, messageId, lat, lng, accuracy } = {}, ack = () => {}) => {
+    const m = ownLiveLocation(chatId, messageId);
+    if (!m) return ack({ error: 'This live location has ended' });
+    if (Date.now() > m.location.expiresAt) {
+      m.location.ended = true;
+      save();
+      emitToChat(chatId, 'message:updated', { chatId, message: m });
+      return ack({ error: 'This live location has ended' });
+    }
+    const pos = cleanPosition({ lat, lng, accuracy });
+    if (!pos) return ack({ error: 'That location is not valid' });
+    Object.assign(m.location, pos, { updatedAt: Date.now() });
+    save();
+    emitToChat(chatId, 'message:updated', { chatId, message: m });
+    ack({ ok: true });
+  });
+
+  socket.on('location:stop', ({ chatId, messageId } = {}, ack = () => {}) => {
+    const m = ownLiveLocation(chatId, messageId);
+    if (!m) return ack({ ok: true });
+    m.location.ended = true;
+    m.location.expiresAt = Math.min(m.location.expiresAt, Date.now());
+    save();
+    emitToChat(chatId, 'message:updated', { chatId, message: m });
+    ack({ ok: true });
+  });
+
   socket.on('message:delete', ({ chatId, messageId } = {}, ack = () => {}) => {
     if (!me || !canAccess(me, chatId)) return ack({ error: 'No access' });
     const msgs = db.messages[chatId] || [];
@@ -566,6 +631,7 @@ io.on('connection', (socket) => {
     m.text = '';
     m.file = null;
     m.websnap = false;
+    m.location = null;
     m.reply = null;
     const changed = [m];
     for (const other of msgs) {
@@ -743,7 +809,7 @@ function statusOf(chatId, m) {
   return { chatId, messageId: m.id, status };
 }
 
-function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, websnap = false, readBy = [] }) {
+function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, websnap = false, location = null, readBy = [] }) {
   const members = chatMembers(chatId);
   const msg = {
     id: newId(),
@@ -755,6 +821,7 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
     system,
     call,
     websnap,
+    location,
     time: Date.now(),
     deliveredTo: members.filter((id) => id !== from && (online.has(id) || readBy.includes(id))),
     readBy,

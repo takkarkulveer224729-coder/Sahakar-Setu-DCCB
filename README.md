@@ -14,9 +14,13 @@ network: office LAN, home Wi-Fi or mobile data.
   - Repeated wrong passwords are blocked for 15 minutes
 - **Chats:** one-to-one chats and group chats
 - **Voice & video calls:** one-to-one, with mute, camera on/off, ringing, and call history (missed / declined / duration) in the chat
+  - **🖥 Screen sharing** during any call (from a PC browser): show a document or report to the other person; phones can watch
 - **Sharing:** photos, videos, audio, PDFs, Word/Excel and any other file, up to 100 MB each
   - Send them with the 📎 button, drag & drop or paste (Ctrl+V)
   - A shared file can only be opened by people in the chat it was sent to
+- **📍 Location:** from the 📎 menu, send your current location, or share **live location** for 15 minutes, 1 hour or 8 hours
+  - Shown on a small OpenStreetMap map with "Open in Google Maps"; live maps move as you move and show when they were last updated
+  - Stop sharing at any time; it ends by itself when the time is up. Keep Coop Connect open on the sharing device
 - **📸 WebSnap:** take a live photo with the PC's webcam (or phone camera) right inside the chat
   - Live preview, 3-second timer, switch camera, retake, add a caption, send
   - The photo is marked "📸 WebSnap" so everyone knows it was taken just now, not picked from old files

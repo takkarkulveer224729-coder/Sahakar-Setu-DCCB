@@ -149,6 +149,7 @@
     if (m.deleted) return '🚫 This message was deleted';
     if (m.call) return callLabel(m);
     if (m.websnap && m.file) return `📸 WebSnap${m.text ? ': ' + m.text : ''}`;
+    if (m.location) return m.location.live ? '📡 Live location' : '📍 Location';
     if (m.file) {
       const icon = m.file.mime.startsWith('image/') ? '📷' : m.file.mime.startsWith('video/') ? '🎥' : m.file.mime.startsWith('audio/') ? '🎵' : '📄';
       return `${icon} ${m.text || m.file.name}`;
@@ -237,6 +238,7 @@
     state.reportOptions = data.reportOptions || [];
     state.maxReports = data.maxReports || 3;
     state.reports = new Map(Object.entries(data.reports || {}));
+    for (const l of data.myLiveLocations || []) startLiveWatch(l.chatId, l.messageId, l.expiresAt);
     $('#login').classList.add('hidden');
     $('#app').classList.remove('hidden');
     const myAv = $('#my-avatar');
@@ -284,6 +286,7 @@
 
   $('#btn-logout').addEventListener('click', async () => {
     if (!confirm('Log out of Coop Connect on this device?')) return;
+    for (const id of [...loc.watchers.keys()]) stopLiveWatch(id);
     socket.disconnect();
     await api('/api/logout').catch(() => {});
     state.current = null;
@@ -380,10 +383,10 @@
   }
 
   $('#search').addEventListener('input', renderChatList);
-  for (const chip of document.querySelectorAll('.chip')) {
+  for (const chip of document.querySelectorAll('.filters .chip')) {
     chip.addEventListener('click', () => {
       state.filter = chip.dataset.filter;
-      for (const c of document.querySelectorAll('.chip')) c.classList.toggle('active', c === chip);
+      for (const c of document.querySelectorAll('.filters .chip')) c.classList.toggle('active', c === chip);
       renderChatList();
     });
   }
@@ -750,10 +753,11 @@
       if (m.reply) {
         node.append(el('div', { class: 'quote', onclick: () => jumpTo(m.reply.id) },
           el('div', { class: 'q-name' }, userName(m.reply.from)),
-          el('div', { class: 'q-text' }, m.reply.text || (m.reply.fileName ? '📎 ' + m.reply.fileName : '')),
+          el('div', { class: 'q-text' }, m.reply.text || (m.reply.fileName ? (/^📍/.test(m.reply.fileName) ? '' : '📎 ') + m.reply.fileName : '')),
         ));
       }
       if (m.websnap && m.file) node.append(el('div', { class: 'websnap-tag', title: 'Photo taken live with WebSnap' }, '📸 WebSnap'));
+      if (m.location) { node.classList.add('loc-msg'); node.append(locationNode(m)); }
       if (m.file) node.append(fileNode(m.file));
       if (m.text) node.append(el('span', { class: 'text' }, linkify(m.text)));
     }
@@ -969,7 +973,6 @@
 
   // ---------- File sharing ----------
 
-  $('#btn-attach').addEventListener('click', () => $('#file-input').click());
   $('#file-input').addEventListener('change', (e) => {
     uploadFiles([...e.target.files]);
     e.target.value = '';
@@ -1063,7 +1066,12 @@
     id: null, peer: null, kind: null, role: null, // role: 'caller' | 'callee'
     pc: null, local: null, pending: [], candidates: [],
     ring: null, timer: null, connectedAt: null, muted: false, cameraOff: false,
+    remoteStream: null, screen: null, // screen: { track, previous, sender } while sharing
   };
+
+  // Screen sharing works in desktop browsers; phones can still watch a shared screen.
+  const canShareScreen = () => !!(navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia)
+    && !/Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   function callsSupported() {
     if (!window.isSecureContext || !navigator.mediaDevices || !window.RTCPeerConnection) {
@@ -1129,6 +1137,7 @@
     $('#call-controls').classList.toggle('hidden', !!incoming);
     $('#call-incoming').classList.toggle('hidden', !incoming);
     $('#call-camera').classList.toggle('hidden', call.kind !== 'video');
+    $('#call-screen').classList.toggle('hidden', !!incoming || !canShareScreen());
     $('#call').classList.toggle('video', call.kind === 'video');
     $('#call').classList.remove('hidden');
     updateCallButtons();
@@ -1147,7 +1156,10 @@
     $('#call-mute').title = call.muted ? 'Unmute microphone' : 'Mute microphone';
     $('#call-camera').classList.toggle('off', call.cameraOff);
     $('#call-camera').title = call.cameraOff ? 'Turn camera on' : 'Turn camera off';
-    $('#call-local').classList.toggle('cam-off', call.cameraOff);
+    $('#call-local').classList.toggle('cam-off', call.cameraOff && !call.screen);
+    $('#call-screen').classList.toggle('on', !!call.screen);
+    $('#call-screen').title = call.screen ? 'Stop sharing your screen' : 'Share your screen';
+    $('#call-camera').disabled = !!call.screen;
   }
 
   function sendSignal(data) { socket.emit('call:signal', { callId: call.id, data }); }
@@ -1156,11 +1168,17 @@
     const pc = new RTCPeerConnection({ iceServers: state.iceServers });
     call.pc = pc;
     for (const track of call.local.getTracks()) pc.addTrack(track, call.local);
+    // Voice calls still get a video slot, so either person can share their screen later
+    // without having to reconnect the call.
+    if (call.role === 'caller' && !call.local.getVideoTracks().length) pc.addTransceiver('video', { direction: 'sendrecv' });
+    call.remoteStream = new MediaStream();
     pc.onicecandidate = (e) => { if (e.candidate) sendSignal({ candidate: e.candidate.toJSON() }); };
     pc.ontrack = (e) => {
       const v = $('#call-remote');
-      if (v.srcObject !== e.streams[0]) {
-        v.srcObject = e.streams[0];
+      // Collect tracks ourselves: the screen-share video slot has no stream of its own.
+      if (!call.remoteStream.getTracks().includes(e.track)) call.remoteStream.addTrack(e.track);
+      if (v.srcObject !== call.remoteStream) {
+        v.srcObject = call.remoteStream;
         v.play().catch(() => {});
       }
       if (e.track.kind === 'video') $('#call').classList.add('has-remote-video');
@@ -1198,6 +1216,10 @@
         await pc.setRemoteDescription(data.sdp);
         for (const c of call.candidates.splice(0)) await pc.addIceCandidate(c);
         if (data.sdp.type === 'offer') {
+          // Let this side send video too (for screen sharing), even without a camera.
+          for (const t of pc.getTransceivers()) {
+            if (t.receiver.track && t.receiver.track.kind === 'video' && t.direction === 'recvonly') t.direction = 'sendrecv';
+          }
           await pc.setLocalDescription(await pc.createAnswer());
           sendSignal({ sdp: pc.localDescription.toJSON() });
         }
@@ -1206,6 +1228,11 @@
         else call.candidates.push(data.candidate);
       } else if ('cameraOff' in data) {
         $('#call').classList.toggle('remote-cam-off', !!data.cameraOff);
+      } else if ('screen' in data) {
+        $('#call').classList.toggle('remote-screen', !!data.screen);
+        $('#call-sharing').textContent = data.screen ? `🖥 ${userName(call.peer)} is sharing their screen` : '';
+        $('#call-sharing').classList.toggle('hidden', !data.screen);
+        if (data.screen) $('#call-remote').play().catch(() => {});
       }
     } catch (err) {
       console.error('call signal', err);
@@ -1308,6 +1335,58 @@
     updateCallButtons();
   });
 
+  // ---------- Screen sharing (during a call) ----------
+
+  function videoSender() {
+    const t = call.pc && call.pc.getTransceivers().find((x) => x.receiver.track && x.receiver.track.kind === 'video');
+    return t ? t.sender : null;
+  }
+
+  async function startScreenShare() {
+    if (!call.pc || call.screen) return;
+    if (!call.connectedAt) return toast('Wait until the call is connected');
+    const sender = videoSender();
+    if (!sender) return toast('Screen sharing is not available in this call');
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 15 }, audio: false });
+    } catch (err) {
+      if (!err || err.name !== 'NotAllowedError') toast('Could not share your screen');
+      return; // NotAllowedError = the person pressed Cancel
+    }
+    if (!call.pc) { for (const t of stream.getTracks()) t.stop(); return; }
+    const track = stream.getVideoTracks()[0];
+    call.screen = { track, previous: sender.track, sender };
+    await sender.replaceTrack(track);
+    track.onended = stopScreenShare; // the browser's own "Stop sharing" button
+    const lv = $('#call-local');
+    lv.srcObject = stream;
+    lv.classList.remove('hidden');
+    lv.classList.add('screen');
+    $('#call').classList.add('sharing');
+    sendSignal({ screen: true });
+    toast('You are sharing your screen');
+    updateCallButtons();
+  }
+
+  async function stopScreenShare() {
+    const sh = call.screen;
+    if (!sh) return;
+    call.screen = null;
+    sh.track.onended = null;
+    sh.track.stop();
+    try { await sh.sender.replaceTrack(sh.previous || null); } catch { /* call may have ended */ }
+    const lv = $('#call-local');
+    lv.classList.remove('screen');
+    lv.srcObject = call.local;
+    lv.classList.toggle('hidden', !call.local || !call.local.getVideoTracks().length);
+    $('#call').classList.remove('sharing');
+    if (call.id) sendSignal({ screen: false });
+    updateCallButtons();
+  }
+
+  $('#call-screen').addEventListener('click', () => (call.screen ? stopScreenShare() : startScreenShare()));
+
   socket.on('call:signal', ({ callId, data }) => { if (callId === call.id) handleSignal(data); });
 
   socket.on('call:ended', ({ callId, status }) => {
@@ -1324,6 +1403,8 @@
 
   function cleanupCall() {
     stopRing();
+    if (call.screen) { call.screen.track.onended = null; call.screen.track.stop(); }
+    $('#call-sharing').classList.add('hidden');
     clearInterval(call.timer);
     if (call.pc) call.pc.close();
     if (call.local) for (const t of call.local.getTracks()) t.stop();
@@ -1332,7 +1413,7 @@
     $('#call').className = 'call hidden';
     Object.assign(call, {
       id: null, peer: null, kind: null, role: null, pc: null, local: null, pending: [], candidates: [],
-      timer: null, connectedAt: null, muted: false, cameraOff: false,
+      timer: null, connectedAt: null, muted: false, cameraOff: false, remoteStream: null, screen: null,
     });
   }
 
@@ -1513,6 +1594,172 @@
     else if (e.key === ' ' && !$('#ws-live').classList.contains('hidden')) { e.preventDefault(); takeSnap(); }
   });
 
+  // ---------- Location sharing (current or live) ----------
+
+  const loc = { chatId: null, pos: null, minutes: 60, seq: 0, watchers: new Map() }; // watchers: messageId -> live share from this device
+
+  function fmtMeters(m) { return m >= 1000 ? `${(m / 1000).toFixed(1)} km` : `${Math.round(m)} m`; }
+  function ago(ts) {
+    const s = Math.round((Date.now() - ts) / 1000);
+    if (s < 60) return 'just now';
+    if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+    return 'at ' + fmtTime(ts);
+  }
+  function mapsUrl(l) { return `https://www.google.com/maps?q=${l.lat},${l.lng}`; }
+  function distanceM(a, b) {
+    const R = 6371000, rad = Math.PI / 180;
+    const dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+
+  // A small map built from OpenStreetMap tiles, centred on the position (no map library needed).
+  function mapNode(lat, lng, live) {
+    const z = 16, n = 2 ** z, size = 256;
+    const latR = lat * Math.PI / 180;
+    const px = ((lng + 180) / 360) * n * size;
+    const py = ((1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2) * n * size;
+    const halfW = 220, halfH = 110; // covers maps up to 440 x 220 px
+    const tiles = [];
+    for (let tx = Math.floor((px - halfW) / size); tx <= Math.floor((px + halfW) / size); tx++) {
+      for (let ty = Math.floor((py - halfH) / size); ty <= Math.floor((py + halfH) / size); ty++) {
+        if (ty < 0 || ty >= n) continue;
+        tiles.push(el('img', {
+          class: 'tile',
+          alt: '',
+          src: `https://tile.openstreetmap.org/${z}/${((tx % n) + n) % n}/${ty}.png`,
+          style: `left:calc(50% + ${Math.round(tx * size - px)}px);top:calc(50% + ${Math.round(ty * size - py)}px)`,
+        }));
+      }
+    }
+    return el('div', { class: 'loc-map' + (live ? ' live' : '') }, tiles, el('span', { class: 'loc-pin' }), el('span', { class: 'loc-attr' }, '© OpenStreetMap'));
+  }
+
+  function openLocation() {
+    if (!state.current) return;
+    if (!window.isSecureContext || !navigator.geolocation) {
+      return toast('Location sharing needs the secure https:// link (or http://localhost on the server PC).');
+    }
+    const seq = ++loc.seq;
+    loc.chatId = state.current.id;
+    loc.pos = null;
+    $('#loc-to').textContent = 'Share with ' + chatTitle(state.current);
+    $('#loc-map').replaceChildren(el('div', { class: 'loc-finding' }, el('span', { class: 'loc-spinner' }), 'Finding your location…'));
+    $('#loc-status').textContent = 'Allow location access if your browser asks.';
+    $('#loc-status').classList.remove('error');
+    $('#loc-live').disabled = true;
+    $('#loc-once').disabled = true;
+    $('#loc-dialog').classList.remove('hidden');
+    navigator.geolocation.getCurrentPosition((p) => {
+      if (seq !== loc.seq || $('#loc-dialog').classList.contains('hidden')) return;
+      loc.pos = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+      $('#loc-map').replaceChildren(mapNode(loc.pos.lat, loc.pos.lng));
+      $('#loc-status').textContent = `📍 Found you — accurate to about ${fmtMeters(loc.pos.accuracy || 0)}`;
+      $('#loc-live').disabled = false;
+      $('#loc-once').disabled = false;
+    }, (err) => {
+      if (seq !== loc.seq) return;
+      $('#loc-map').replaceChildren();
+      $('#loc-status').textContent = err.code === 1
+        ? 'Location access is blocked. Click the 🔒 icon in the address bar, allow Location, and try again.'
+        : 'Could not find your location. Turn on location (GPS) and try again.';
+      $('#loc-status').classList.add('error');
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+  }
+  const closeLocation = () => { loc.seq++; $('#loc-dialog').classList.add('hidden'); };
+
+  function sendLocation(live) {
+    if (!loc.pos) return;
+    const chatId = loc.chatId;
+    socket.emit('message:send', { chatId, location: { ...loc.pos, live, minutes: loc.minutes } }, (res) => {
+      if (res.error) return toast(res.error);
+      closeLocation();
+      if (live) {
+        startLiveWatch(chatId, res.message.id, res.message.location.expiresAt);
+        toast(`Sharing your live location until ${fmtTime(res.message.location.expiresAt)}. Keep Coop Connect open.`);
+      }
+    });
+  }
+
+  // Keeps sending this device's position for a live location until it ends.
+  function startLiveWatch(chatId, messageId, expiresAt) {
+    if (loc.watchers.has(messageId) || !navigator.geolocation || expiresAt <= Date.now()) return;
+    const w = { chatId, lastSent: 0, last: null };
+    w.watchId = navigator.geolocation.watchPosition((p) => {
+      const pos = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy };
+      const now = Date.now();
+      const moved = !w.last || distanceM(w.last, pos) > 15;
+      if (now - w.lastSent < 5000 || (!moved && now - w.lastSent < 60000)) return;
+      w.lastSent = now;
+      w.last = pos;
+      socket.emit('location:update', { chatId, messageId, ...pos }, (res) => { if (res.error) stopLiveWatch(messageId); });
+    }, () => { /* keep trying; the bubble shows when it was last updated */ }, { enableHighAccuracy: true, maximumAge: 10000 });
+    w.timer = setTimeout(() => stopLiveWatch(messageId), expiresAt - Date.now());
+    loc.watchers.set(messageId, w);
+  }
+
+  function stopLiveWatch(messageId) {
+    const w = loc.watchers.get(messageId);
+    if (!w) return;
+    navigator.geolocation.clearWatch(w.watchId);
+    clearTimeout(w.timer);
+    loc.watchers.delete(messageId);
+  }
+
+  function stopLiveShare(chatId, messageId) {
+    stopLiveWatch(messageId);
+    socket.emit('location:stop', { chatId, messageId }, () => toast('Stopped sharing your live location'));
+  }
+
+  // The location card shown inside a chat bubble.
+  function locationNode(m) {
+    const l = m.location;
+    const mine = m.from === state.me.id;
+    const active = l.live && !l.ended && Date.now() < l.expiresAt;
+    const title = !l.live ? '📍 Location' : active ? '📡 Live location' : 'Live location ended';
+    const sub = !l.live ? (l.acc ? `Accurate to about ${fmtMeters(l.acc)}` : '')
+      : active ? `Until ${fmtTime(l.expiresAt)} · updated ${ago(l.updatedAt)}`
+      : `Last position ${fmtTime(l.updatedAt)}`;
+    return el('div', { class: 'loc-card' + (active ? ' active' : '') + (l.live && !active ? ' ended' : '') },
+      el('a', { class: 'loc-map-link', href: mapsUrl(l), target: '_blank', rel: 'noopener noreferrer', title: 'Open in Google Maps' }, mapNode(l.lat, l.lng, active)),
+      el('div', { class: 'loc-info' },
+        el('div', { class: 'loc-title' }, title),
+        sub ? el('div', { class: 'loc-sub' }, sub) : null,
+        el('div', { class: 'loc-actions' },
+          el('a', { href: mapsUrl(l), target: '_blank', rel: 'noopener noreferrer' }, 'Open in Google Maps ↗'),
+          mine && active ? el('button', { type: 'button', class: 'loc-stop', onclick: () => stopLiveShare(m.chatId, m.id) }, 'Stop sharing') : null,
+        ),
+      ),
+    );
+  }
+
+  // Re-draw live location cards so "updated … ago" and endings stay correct.
+  setInterval(() => {
+    if (!state.current) return;
+    for (const m of state.messages) {
+      if (m.location && m.location.live && !m.location.ended) replaceMessageNode(m);
+    }
+  }, 30000);
+
+  $('#btn-attach').addEventListener('click', (e) => {
+    e.stopPropagation();
+    popupMenu(e.currentTarget, [
+      ['📄  Photos & files', () => $('#file-input').click()],
+      ['📍  Location', openLocation],
+    ]);
+  });
+  $('#loc-close').addEventListener('click', closeLocation);
+  $('#loc-dialog').addEventListener('click', (e) => { if (e.target.id === 'loc-dialog') closeLocation(); });
+  $('#loc-live').addEventListener('click', () => sendLocation(true));
+  $('#loc-once').addEventListener('click', () => sendLocation(false));
+  for (const chip of document.querySelectorAll('.loc-durations .chip')) {
+    chip.addEventListener('click', () => {
+      loc.minutes = Number(chip.dataset.minutes);
+      for (const c of document.querySelectorAll('.loc-durations .chip')) c.classList.toggle('active', c === chip);
+    });
+  }
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#loc-dialog').classList.contains('hidden')) closeLocation(); });
+
   // ---------- Realtime events ----------
 
   function markRead() {
@@ -1572,16 +1819,17 @@
     }
   });
 
+  function replaceMessageNode(message) {
+    const i = state.messages.findIndex((x) => x.id === message.id);
+    if (i < 0) return;
+    state.messages[i] = message;
+    const node = $(`#messages [data-id="${CSS.escape(message.id)}"]`);
+    const prev = state.messages[i - 1];
+    if (node) node.replaceWith(messageNode(message, prev && !prev.system && fmtDay(prev.time) === fmtDay(message.time) ? prev : null));
+  }
+
   socket.on('message:updated', ({ chatId, message }) => {
-    if (state.current && state.current.id === chatId) {
-      const i = state.messages.findIndex((x) => x.id === message.id);
-      if (i >= 0) {
-        state.messages[i] = message;
-        const node = $(`#messages [data-id="${CSS.escape(message.id)}"]`);
-        const prev = state.messages[i - 1];
-        if (node) node.replaceWith(messageNode(message, prev && !prev.system && fmtDay(prev.time) === fmtDay(message.time) ? prev : null));
-      }
-    }
+    if (state.current && state.current.id === chatId) replaceMessageNode(message);
   });
 
   socket.on('message:removed', ({ chatId, messageIds }) => {
