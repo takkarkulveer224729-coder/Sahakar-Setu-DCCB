@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Coop Connect</title>
-  <meta name="theme-color" content="#008069">
+  <meta name="theme-color" content="#0B7A43">
   <link rel="icon" type="image/png" href="img/favicon.png">
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
   <link rel="manifest" href="manifest.webmanifest">
@@ -13,9 +13,23 @@
 <body>
   <!-- Login -->
   <div id="login" class="login hidden">
+    <section class="login-hero" aria-hidden="true">
+      <div class="hero-inner">
+        <img class="hero-logo" src="img/logo.png" alt="" width="132" height="132">
+        <h1 class="hero-title">Coop Connect</h1>
+        <p class="hero-tagline">Secure team messaging for your co-operative.</p>
+        <ul class="hero-points">
+          <li><span>💬</span> One-to-one chats and groups</li>
+          <li><span>📞</span> Voice and video calls</li>
+          <li><span>📎</span> Files, photos and WebSnap</li>
+          <li><span>🔒</span> Hosted on your co-op's own server</li>
+        </ul>
+      </div>
+    </section>
     <div class="login-card">
-      <img class="login-logo" src="img/logo.png" alt="Coop Connect" width="150" height="150">
-      <p class="muted">Chat and share files with your co-op, from anywhere.</p>
+      <img class="login-logo" src="img/logo.png" alt="Coop Connect" width="110" height="110">
+      <h2 id="login-title" class="login-title">Welcome back</h2>
+      <p id="login-subtitle" class="muted login-subtitle">Sign in to continue to Coop Connect.</p>
       <div class="tabs" role="tablist">
         <button type="button" id="tab-login" class="tab active" role="tab">Log in</button>
         <button type="button" id="tab-register" class="tab" role="tab">Create account</button>
@@ -75,7 +89,13 @@
         </div>
       </header>
       <div class="search-wrap">
-        <input id="search" placeholder="Search or start new chat">
+        <svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+        <input id="search" placeholder="Search chats or people" autocomplete="off">
+      </div>
+      <div class="filters" role="tablist" aria-label="Filter chats">
+        <button type="button" class="chip active" data-filter="all">All</button>
+        <button type="button" class="chip" data-filter="unread">Unread</button>
+        <button type="button" class="chip" data-filter="groups">Groups</button>
       </div>
       <div id="chat-list" class="chat-list"></div>
 
@@ -93,8 +113,15 @@
 
     <main id="main" class="main">
       <div id="welcome" class="welcome">
-        <img class="welcome-logo" src="img/logo.png" alt="Coop Connect" width="220" height="220">
-        <p class="muted">Send and receive messages, photos, videos and documents.<br>Pick a chat on the left or start a new one.</p>
+        <img class="welcome-logo" src="img/logo.png" alt="Coop Connect" width="170" height="170">
+        <h2 class="welcome-title">Welcome to Coop Connect</h2>
+        <p class="muted welcome-text">Pick a chat on the left, or start a new conversation with your team.</p>
+        <div class="welcome-features">
+          <div class="feature"><span class="f-icon">💬</span><b>Chats &amp; groups</b><small>Instant messages with read receipts</small></div>
+          <div class="feature"><span class="f-icon">📞</span><b>Voice &amp; video</b><small>One-to-one calls in the browser</small></div>
+          <div class="feature"><span class="f-icon">📸</span><b>Files &amp; WebSnap</b><small>Share documents and live photos</small></div>
+        </div>
+        <p class="welcome-foot">🔒 Your messages are stored on your co-op's own server.</p>
       </div>
 
       <div id="conversation" class="conversation hidden">

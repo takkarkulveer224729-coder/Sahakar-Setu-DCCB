@@ -11,6 +11,7 @@
     messages: [], // messages of the open chat
     typing: new Map(), // chatId -> Map(userId -> timeout)
     replyTo: null,
+    filter: 'all', // chat list filter: all | unread | groups
     unreadTitle: 0,
   };
 
@@ -210,6 +211,8 @@
     $('#login-form').classList.toggle('hidden', !login);
     $('#register-form').classList.toggle('hidden', login);
     for (const err of document.querySelectorAll('[data-error]')) err.textContent = '';
+    $('#login-title').textContent = login ? 'Welcome back' : 'Create your account';
+    $('#login-subtitle').textContent = login ? 'Sign in to continue to Coop Connect.' : 'It only takes a minute. Use your real name so colleagues recognise you.';
     (login ? $('#login-username') : $('#reg-name')).focus();
   }
   $('#tab-login').addEventListener('click', () => showAuthForm('login'));
@@ -313,7 +316,8 @@
       .filter((c) => c.last || c.kept || c.type === 'group')
       .sort((a, b) => ((b.last && b.last.time) || 0) - ((a.last && a.last.time) || 0));
 
-    const matching = chats.filter((c) => !q || chatTitle(c).toLowerCase().includes(q));
+    const byFilter = (c) => state.filter === 'unread' ? c.unread > 0 : state.filter === 'groups' ? c.type === 'group' : true;
+    const matching = chats.filter((c) => byFilter(c) && (!q || chatTitle(c).toLowerCase().includes(q)));
     for (const c of matching) list.append(chatItem(c));
 
     // When searching, also offer people you haven't chatted with yet.
@@ -326,7 +330,11 @@
       }
     }
     if (!list.children.length) {
-      list.append(el('div', { class: 'empty-list' }, q ? 'No chats or contacts found' : 'No chats yet. Click the 💬 icon above to start one.'));
+      const emptyText = q ? 'No chats or contacts found'
+        : state.filter === 'unread' ? 'You\'re all caught up — no unread messages.'
+        : state.filter === 'groups' ? 'No groups yet. Use the 👥 button above to create one.'
+        : 'No chats yet. Click the 💬 button above to start one.';
+      list.append(el('div', { class: 'empty-list' }, emptyText));
     }
     updateTitle();
   }
@@ -368,6 +376,13 @@
   }
 
   $('#search').addEventListener('input', renderChatList);
+  for (const chip of document.querySelectorAll('.chip')) {
+    chip.addEventListener('click', () => {
+      state.filter = chip.dataset.filter;
+      for (const c of document.querySelectorAll('.chip')) c.classList.toggle('active', c === chip);
+      renderChatList();
+    });
+  }
 
   // ---------- Side panel (new chat / group / profile) ----------
 
