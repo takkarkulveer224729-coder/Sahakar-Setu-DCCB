@@ -81,6 +81,11 @@ pointing at `http://localhost:3000`.
 
 ### Option B: Host it in the cloud (always on, permanent address)
 
+**Google Cloud's free server, keeping your existing link:** follow
+[docs/GOOGLE-CLOUD.md](docs/GOOGLE-CLOUD.md). `export-data.bat` packs your accounts, messages and
+files on the old PC; `scripts/install-linux.sh --import coop-data-backup.zip` sets everything up on
+the server, including Tailscale with the same machine name, so the link doesn't change.
+
 Use this if the PC can't stay on. The address is fixed too.
 
 **Render (easiest):**
