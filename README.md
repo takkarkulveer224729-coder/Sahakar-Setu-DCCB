@@ -21,6 +21,10 @@ network: office LAN, home Wi-Fi or mobile data.
   - Live preview, 3-second timer, switch camera, retake, add a caption, send
   - The photo is marked "📸 WebSnap" so everyone knows it was taken just now, not picked from old files
   - Like calls, it needs the `https://` link and permission to use the camera
+- **▶ Ytmood:** share a YouTube video straight into a chat with the red YouTube button
+  - Paste any YouTube link (videos, Shorts, live, `youtu.be`, with or without a start time)
+  - See the thumbnail, title and channel before sending, and add a caption
+  - The video plays right inside the chat (YouTube's privacy-enhanced player), or open it on YouTube
 - **Status:** sent / delivered / read ticks, online and "last seen", and "typing…"
 - **Messages:** reply, copy, **delete for me** (any message) and **delete for everyone** (your own; removes the shared file too)
 - **Chat menu (⋮):** contact/group info, **clear chat** (empties it for you only), **delete chat**, exit group

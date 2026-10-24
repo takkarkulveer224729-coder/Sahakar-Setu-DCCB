@@ -109,6 +109,53 @@ function passwordProblem(password) {
 
 const COLORS = ['#00a884', '#53bdeb', '#e542a3', '#ffb02e', '#7f66ff', '#fc4c4c', '#25d366', '#ff7f50', '#02a698', '#a066aa'];
 
+// ---------- Ytmood: YouTube videos shared in chats ----------
+
+// Accepts youtube.com/watch?v=, youtu.be/, /shorts/, /embed/, /live/ and m./music. links.
+function parseYouTube(input) {
+  let url;
+  try {
+    url = new URL(String(input || '').trim());
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^(www|m|music)\./, '');
+  let id = null;
+  if (host === 'youtu.be') id = url.pathname.slice(1).split('/')[0];
+  else if (host === 'youtube.com' || host === 'youtube-nocookie.com') {
+    if (url.pathname === '/watch') id = url.searchParams.get('v');
+    else {
+      const m = url.pathname.match(/^\/(shorts|embed|live|v)\/([^/?#]+)/);
+      if (m) id = m[2];
+    }
+  }
+  if (!id || !/^[A-Za-z0-9_-]{11}$/.test(id)) return null;
+  // Optional start time: t=90, t=1m30s, start=90
+  const t = url.searchParams.get('t') || url.searchParams.get('start') || '';
+  let start = 0;
+  const parts = t.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s?)?$/);
+  if (t && parts) start = (+parts[1] || 0) * 3600 + (+parts[2] || 0) * 60 + (+parts[3] || 0);
+  return { id, start: Math.min(start, 86400) };
+}
+
+// Title and channel come from YouTube's public oEmbed service (no API key needed).
+const ytCache = new Map();
+async function youTubeInfo(id) {
+  if (ytCache.has(id)) return ytCache.get(id);
+  let info = { title: null, author: null };
+  try {
+    const endpoint = process.env.YOUTUBE_OEMBED_URL || 'https://www.youtube.com/oembed';
+    const res = await fetch(`${endpoint}?format=json&url=${encodeURIComponent('https://www.youtube.com/watch?v=' + id)}`,
+      { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      info = { title: String(data.title || '').slice(0, 200) || null, author: String(data.author_name || '').slice(0, 100) || null };
+      ytCache.set(id, info);
+    }
+  } catch { /* offline or blocked: the card still works without a title */ }
+  return info;
+}
+
 // ---------- Sessions ----------
 
 function parseCookies(header = '') {
@@ -268,7 +315,8 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, 'public'), {
   setHeaders: (res) => res.setHeader('Content-Security-Policy',
-    "default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-ancestors 'none'"),
+    "default-src 'self'; img-src 'self' data: blob: https://i.ytimg.com; media-src 'self' blob:; " +
+    "style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss:; frame-src https://www.youtube-nocookie.com; frame-ancestors 'none'"),
 }));
 app.use('/api', express.json({ limit: '10kb' }));
 
@@ -487,7 +535,7 @@ io.on('connection', (socket) => {
     ack({ ok: true });
   });
 
-  socket.on('message:send', ({ chatId, peerId, text, file, replyTo, websnap } = {}, ack = () => {}) => {
+  socket.on('message:send', async ({ chatId, peerId, text, file, replyTo, websnap, youtube } = {}, ack = () => {}) => {
     if (!me) return ack({ error: 'Not logged in' });
     if (isUser(peerId)) chatId = dmId(me, peerId);
     if (!chatId || !canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
@@ -499,21 +547,36 @@ io.on('connection', (socket) => {
       if (!f.chats.includes(chatId)) f.chats.push(chatId);
       attachment = { id: f.id, name: f.name, size: f.size, mime: f.mime, url: '/uploads/' + f.id };
     }
-    if (!text.trim() && !attachment) return ack({ error: 'Empty message' });
+    let video = null;
+    if (youtube) {
+      const yt = parseYouTube(youtube);
+      if (!yt) return ack({ error: 'That is not a YouTube video link' });
+      video = { ...yt, ...(await youTubeInfo(yt.id)) };
+      if (!canAccess(me, chatId)) return ack({ error: 'No access to this chat' });
+    }
+    if (!text.trim() && !attachment && !video) return ack({ error: 'Empty message' });
     let reply = null;
     if (replyTo) {
       const orig = (db.messages[chatId] || []).find((m) => m.id === replyTo);
       if (orig && !orig.deleted) {
-        reply = { id: orig.id, from: orig.from, text: orig.text.slice(0, 200), fileName: orig.file && orig.file.name };
+        const fileName = orig.file ? orig.file.name : orig.youtube ? '▶ ' + (orig.youtube.title || 'YouTube video') : null;
+        reply = { id: orig.id, from: orig.from, text: orig.text.slice(0, 200), fileName };
       }
     }
     // WebSnap = a photo taken live with the sender's camera inside Coop Connect.
     websnap = !!websnap && !!attachment && attachment.mime.startsWith('image/');
-    const msg = addMessage(chatId, { from: me, text, file: attachment, reply, websnap });
+    const msg = addMessage(chatId, { from: me, text, file: attachment, reply, websnap, youtube: video });
     ack({ ok: true, message: msg });
   });
 
   // Delete for everyone: only your own messages. The text, file and any quotes of it disappear.
+  // Ytmood preview: check a link and fetch the video's title before sending.
+  socket.on('yt:lookup', async ({ url } = {}, ack = () => {}) => {
+    const yt = parseYouTube(url);
+    if (!yt) return ack({ error: 'Paste a YouTube video link, e.g. https://youtu.be/…' });
+    ack({ ok: true, video: { ...yt, ...(await youTubeInfo(yt.id)) } });
+  });
+
   socket.on('message:delete', ({ chatId, messageId } = {}, ack = () => {}) => {
     if (!me || !canAccess(me, chatId)) return ack({ error: 'No access' });
     const msgs = db.messages[chatId] || [];
@@ -525,6 +588,7 @@ io.on('connection', (socket) => {
     m.text = '';
     m.file = null;
     m.websnap = false;
+    m.youtube = null;
     m.reply = null;
     const changed = [m];
     for (const other of msgs) {
@@ -702,7 +766,7 @@ function statusOf(chatId, m) {
   return { chatId, messageId: m.id, status };
 }
 
-function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, websnap = false, readBy = [] }) {
+function addMessage(chatId, { from = null, text = '', file = null, reply = null, system = false, call = null, websnap = false, youtube = null, readBy = [] }) {
   const members = chatMembers(chatId);
   const msg = {
     id: newId(),
@@ -714,6 +778,7 @@ function addMessage(chatId, { from = null, text = '', file = null, reply = null,
     system,
     call,
     websnap,
+    youtube,
     time: Date.now(),
     deliveredTo: members.filter((id) => id !== from && (online.has(id) || readBy.includes(id))),
     readBy,
