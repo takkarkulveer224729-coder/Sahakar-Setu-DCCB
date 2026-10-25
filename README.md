@@ -37,6 +37,8 @@ network: office LAN, home Wi-Fi or mobile data.
   - The lock password is stored only as a hash on that device, never sent anywhere; forgetting it means clearing the site's browser data (which signs that device out)
 - **Look:** professional design in the Coop Connect brand colours: split-screen sign-in, All / Unread / Groups filters, light and dark theme, and a layout that also works on phones
 
+**New here?** A simple step-by-step guide for everyday users is in [docs/USER-MANUAL.md](docs/USER-MANUAL.md).
+
 ## 1. Try it on one PC or office network
 
 1. Install **Node.js** (LTS) from <https://nodejs.org>.
