@@ -32,6 +32,9 @@ network: office LAN, home Wi-Fi or mobile data.
 - **About (status):** WhatsApp-style moods like 🟢 Available, 🤝 In a meeting, 🚜 On field visit, or your own text with emojis. Tap a chat's name to see someone's About
 - **Report status:** under About in Profile, pick up to 3 of: `229-217-314`, `229,217-314`, `314 downloaded many times..`, `414 downloaded`
   - Tick exactly which people may see it; only they see it in your Contact info (enforced by the server, updates instantly)
+- **App lock:** hide the whole app behind a plain **Secure Login** password screen that doesn't look like a chat (set a lock password per device in Profile)
+  - Locks on reopening the tab and when you tap the padlock; even the browser tab title becomes "Secure Login"
+  - The lock password is stored only as a hash on that device, never sent anywhere; forgetting it means clearing the site's browser data (which signs that device out)
 - **Look:** professional design in the Coop Connect brand colours: split-screen sign-in, All / Unread / Groups filters, light and dark theme, and a layout that also works on phones
 
 ## 1. Try it on one PC or office network

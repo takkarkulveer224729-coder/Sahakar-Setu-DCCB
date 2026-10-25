@@ -1223,3 +1223,89 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
 }
 /* During a call, show messages above the call buttons. */
 .call:not(.hidden) ~ .toast { bottom: 130px; }
+
+/* ---------- App lock: neutral "Secure Login" screen ---------- */
+.lock-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: #e9edf1;
+  background: linear-gradient(160deg, #eef1f4 0%, #dfe4ea 100%);
+}
+@media (prefers-color-scheme: dark) {
+  .lock-screen { background: linear-gradient(160deg, #1b2027 0%, #0f1319 100%); }
+}
+.lock-card {
+  width: 100%;
+  max-width: 340px;
+  background: #ffffff;
+  border: 1px solid #d4dae1;
+  border-radius: 6px;
+  padding: 34px 28px 28px;
+  box-shadow: 0 10px 34px rgba(20, 30, 48, 0.16);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+@media (prefers-color-scheme: dark) {
+  .lock-card { background: #161b22; border-color: #2a323c; }
+}
+.lock-mark {
+  width: 54px;
+  height: 54px;
+  margin: 0 auto 10px;
+  border-radius: 50%;
+  background: #eef1f4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.lock-mark svg { width: 28px; height: 28px; fill: #5b6670; }
+@media (prefers-color-scheme: dark) {
+  .lock-mark { background: #222a33; }
+  .lock-mark svg { fill: #9aa6b2; }
+}
+.lock-title { font-size: 21px; font-weight: 600; margin: 0; color: #2b333c; letter-spacing: 0.2px; }
+.lock-sub { font-size: 12.5px; color: #8a949e; margin: 2px 0 18px; }
+@media (prefers-color-scheme: dark) {
+  .lock-title { color: #e6ebf0; }
+  .lock-sub { color: #828d98; }
+}
+.lock-label { font-size: 12px; color: #6b7682; text-align: left; margin-bottom: 5px; font-weight: 600; }
+.lock-card input {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #c4ccd4;
+  border-radius: 4px;
+  background: #fbfcfd;
+  outline: none;
+  font-size: 15px;
+  margin-bottom: 14px;
+}
+.lock-card input:focus { border-color: #5a7fae; box-shadow: 0 0 0 3px rgba(90, 127, 174, 0.18); }
+@media (prefers-color-scheme: dark) {
+  .lock-card input { background: #1d242c; border-color: #323c47; color: #e6ebf0; }
+}
+.lock-btn {
+  width: 100%;
+  padding: 11px;
+  border: 0;
+  border-radius: 4px;
+  background: #3f6391;
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  letter-spacing: 0.3px;
+}
+.lock-btn:hover { background: #355379; }
+.lock-btn:active { transform: translateY(1px); }
+.lock-error { color: #c0392b; font-size: 13px; min-height: 18px; margin-top: 10px; }
+
+.applock-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.applock-buttons .btn-primary, .applock-buttons .dialog-btn { flex: 1; min-width: 120px; }

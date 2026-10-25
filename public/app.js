@@ -240,7 +240,6 @@
     state.reports = new Map(Object.entries(data.reports || {}));
     for (const l of data.myLiveLocations || []) startLiveWatch(l.chatId, l.messageId, l.expiresAt);
     $('#login').classList.add('hidden');
-    $('#app').classList.remove('hidden');
     const myAv = $('#my-avatar');
     myAv.textContent = initials(state.me.name);
     myAv.style.background = state.me.color;
@@ -248,6 +247,10 @@
     renderChatList();
     if (state.current) openChat({ chatId: state.current.id });
     if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+    // Reveal the app, unless the device's app lock is on (then show the lock screen).
+    updateLockButton();
+    if (lockEnabled()) showLock();
+    else $('#app').classList.remove('hidden');
   }
 
   async function submitAuth(form, path, body) {
@@ -594,6 +597,165 @@
     return el('div', { class: 'report-badges' }, items.map((i) => el('span', { class: 'report-badge' }, i)));
   }
 
+  // ---------- App lock: a neutral password screen that hides the whole app ----------
+  // Device-local privacy screen. The unlock password is stored only as a PBKDF2 hash
+  // in this browser (never sent anywhere). Forgotten it? Clearing the site's data in
+  // the browser removes the lock (and signs this device out).
+
+  const LOCK_KEY = 'cc-applock';
+  const LOCK_ITERATIONS = 150000;
+  const applock = { locked: false, fails: 0, titleBefore: null };
+
+  function lockConfig() {
+    try { return JSON.parse(localStorage.getItem(LOCK_KEY) || 'null'); } catch { return null; }
+  }
+  const lockEnabled = () => !!lockConfig();
+
+  function lockSupported() {
+    return !!(window.crypto && crypto.subtle && window.isSecureContext);
+  }
+
+  const toHex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+  const fromHex = (h) => Uint8Array.from(h.match(/../g).map((x) => parseInt(x, 16)));
+
+  async function hashLockPassword(password, saltHex, iterations) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits']);
+    const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: fromHex(saltHex), iterations, hash: 'SHA-256' }, key, 256);
+    return toHex(bits);
+  }
+
+  async function setLockPassword(password) {
+    const saltHex = toHex(crypto.getRandomValues(new Uint8Array(16)));
+    const hash = await hashLockPassword(password, saltHex, LOCK_ITERATIONS);
+    localStorage.setItem(LOCK_KEY, JSON.stringify({ salt: saltHex, hash, iterations: LOCK_ITERATIONS }));
+  }
+
+  async function checkLockPassword(password) {
+    const cfg = lockConfig();
+    if (!cfg) return false;
+    const hash = await hashLockPassword(password, cfg.salt, cfg.iterations || LOCK_ITERATIONS);
+    return hash === cfg.hash;
+  }
+
+  function updateLockButton() {
+    $('#btn-lock').classList.toggle('hidden', !lockEnabled() || applock.locked);
+  }
+
+  // Neutral tab title/icon while locked, so even the browser tab doesn't reveal the app.
+  const LOCK_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path fill='%235b6670' d='M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z'/></svg>";
+
+  function showLock() {
+    if (!state.me || !lockEnabled() || applock.locked) return;
+    applock.locked = true;
+    applock.fails = 0;
+    // Hide everything that could reveal the app.
+    $('#app').classList.add('hidden');
+    $('#login').classList.add('hidden');
+    closePanel();
+    $('#lock-error').textContent = '';
+    $('#lock-pass').value = '';
+    $('#lock').classList.remove('hidden');
+    $('#lock-pass').focus();
+    applock.titleBefore = document.title;
+    document.title = 'Secure Login';
+    const fav = document.querySelector('link[rel=icon]');
+    if (fav) { applock.favBefore = fav.href; fav.href = LOCK_FAVICON; }
+  }
+
+  function hideLock() {
+    applock.locked = false;
+    $('#lock').classList.add('hidden');
+    $('#lock-pass').value = '';
+    if (state.me) $('#app').classList.remove('hidden');
+    if (applock.titleBefore) document.title = applock.titleBefore;
+    const fav = document.querySelector('link[rel=icon]');
+    if (fav && applock.favBefore) fav.href = applock.favBefore;
+    updateLockButton();
+  }
+
+  $('#lock-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#lock-form button');
+    const err = $('#lock-error');
+    const pass = $('#lock-pass').value;
+    if (!pass) return;
+    btn.disabled = true;
+    // Slow down repeated wrong guesses on this device.
+    if (applock.fails >= 5) await new Promise((r) => setTimeout(r, Math.min(applock.fails - 4, 10) * 1000));
+    let good = false;
+    try { good = await checkLockPassword(pass); } catch { /* treated as wrong */ }
+    btn.disabled = false;
+    if (good) {
+      hideLock();
+    } else {
+      applock.fails++;
+      err.textContent = 'Incorrect password';
+      $('#lock-pass').value = '';
+      $('#lock-pass').focus();
+    }
+  });
+
+  $('#btn-lock').addEventListener('click', showLock);
+
+  // Lock when switching back to the tab after a while (startApp locks on first open).
+  let hiddenSince = 0;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { hiddenSince = Date.now(); return; }
+    if (lockEnabled() && !applock.locked && hiddenSince && Date.now() - hiddenSince > 60000) showLock();
+  });
+
+  // Profile section to turn the app lock on/off.
+  function appLockEditor() {
+    const box = el('div', { class: 'field applock-field' });
+    const render = () => {
+      if (!lockSupported()) {
+        box.replaceChildren(
+          el('label', {}, 'App lock'),
+          el('div', { class: 'muted small' }, 'App lock needs the secure https:// link (or http://localhost on the server PC).'),
+        );
+        return;
+      }
+      if (lockEnabled()) {
+        box.replaceChildren(
+          el('label', {}, 'App lock'),
+          el('div', { class: 'muted small' }, 'On. The app shows a plain password screen when you open or lock it.'),
+          el('div', { class: 'applock-buttons' },
+            el('button', { class: 'btn-primary', onclick: () => { closePanel(); showLock(); } }, 'Lock now'),
+            el('button', { class: 'dialog-btn', onclick: async () => {
+              const cur = prompt('Enter your app lock password to turn it off:');
+              if (cur == null) return;
+              if (!(await checkLockPassword(cur))) return toast('Incorrect password');
+              localStorage.removeItem(LOCK_KEY);
+              toast('App lock turned off');
+              updateLockButton();
+              render();
+            } }, 'Turn off'),
+          ),
+        );
+        return;
+      }
+      const p1 = el('input', { type: 'password', placeholder: 'New lock password (min 4)', autocomplete: 'new-password' });
+      const p2 = el('input', { type: 'password', placeholder: 'Confirm lock password', autocomplete: 'new-password' });
+      box.replaceChildren(
+        el('label', {}, 'App lock'),
+        el('div', { class: 'muted small' }, 'Hide the app behind a plain password screen that doesn\'t look like a chat. Set a lock password for this device:'),
+        el('div', { class: 'pw-form' }, p1, p2),
+        el('div', { class: 'applock-buttons' },
+          el('button', { class: 'btn-primary', onclick: async () => {
+            if (p1.value.length < 4) return toast('Lock password must be at least 4 characters');
+            if (p1.value !== p2.value) return toast('Passwords do not match');
+            await setLockPassword(p1.value);
+            toast('App lock turned on for this device');
+            updateLockButton();
+            render();
+          } }, 'Turn on app lock'),
+        ),
+      );
+    };
+    render();
+    return box;
+  }
+
   $('#my-avatar').addEventListener('click', () => {
     const current = el('input', { type: 'password', placeholder: 'Current password', autocomplete: 'current-password' });
     const next = el('input', { type: 'password', placeholder: 'New password (min 6 characters)', autocomplete: 'new-password' });
@@ -605,6 +767,7 @@
         el('div', { class: 'username' }, '@' + state.me.username)),
       aboutEditor(),
       reportEditor(),
+      appLockEditor(),
       el('div', { class: 'field pw-form' }, el('label', {}, 'Change password'), current, next, next2),
       el('div', { class: 'actions' }, el('button', { class: 'btn-primary', onclick: async () => {
         if (next.value !== next2.value) return toast('New passwords do not match');
