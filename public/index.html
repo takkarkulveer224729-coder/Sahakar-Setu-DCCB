@@ -193,15 +193,24 @@
   <!-- App lock: a neutral password screen that hides the app -->
   <div id="lock" class="lock-screen hidden">
     <form id="lock-form" class="lock-card" autocomplete="off">
-      <div class="lock-mark" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M12 1a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-9a2 2 0 0 0-2-2h-1V6a5 5 0 0 0-5-5zm3 8H9V6a3 3 0 0 1 6 0v3z"/></svg>
+      <div class="lock-accent" aria-hidden="true"></div>
+      <div class="lock-body">
+        <div class="lock-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 1 4 4.5V11c0 5 3.4 9.3 8 10.5 4.6-1.2 8-5.5 8-10.5V4.5L12 1zm0 6a2.2 2.2 0 0 1 1 4.2V14h-2v-2.8A2.2 2.2 0 0 1 12 7z"/></svg>
+        </div>
+        <h1 class="lock-title">Secure Login</h1>
+        <p class="lock-sub">Enter your password to continue</p>
+        <label class="lock-label" for="lock-pass">Password</label>
+        <div class="lock-input">
+          <input id="lock-pass" type="password" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" required>
+          <button type="button" id="lock-eye" class="lock-eye" title="Show password" aria-label="Show password">
+            <svg viewBox="0 0 24 24"><path d="M12 5c-5 0-9 4.5-10 7 1 2.5 5 7 10 7s9-4.5 10-7c-1-2.5-5-7-10-7zm0 11a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm0-2a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+          </button>
+        </div>
+        <button type="submit" class="lock-btn">Sign in</button>
+        <div id="lock-error" class="lock-error"></div>
       </div>
-      <h1 class="lock-title">Secure Login</h1>
-      <p class="lock-sub">Authorized access only</p>
-      <label class="lock-label" for="lock-pass">Password</label>
-      <input id="lock-pass" type="password" inputmode="text" autocomplete="off" autocapitalize="none" spellcheck="false" required>
-      <button type="submit" class="lock-btn">Log In</button>
-      <div id="lock-error" class="lock-error"></div>
+      <div class="lock-foot">🔒 Protected session · Authorized access only</div>
     </form>
   </div>
 

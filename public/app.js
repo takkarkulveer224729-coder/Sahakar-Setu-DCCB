@@ -697,6 +697,15 @@
 
   $('#btn-lock').addEventListener('click', showLock);
 
+  $('#lock-eye').addEventListener('click', () => {
+    const inp = $('#lock-pass');
+    const show = inp.type === 'password';
+    inp.type = show ? 'text' : 'password';
+    $('#lock-eye').classList.toggle('on', show);
+    $('#lock-eye').title = show ? 'Hide password' : 'Show password';
+    inp.focus();
+  });
+
   // Lock when switching back to the tab after a while (startApp locks on first open).
   let hiddenSince = 0;
   document.addEventListener('visibilitychange', () => {

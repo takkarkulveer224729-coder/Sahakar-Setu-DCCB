@@ -1224,7 +1224,7 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
 /* During a call, show messages above the call buttons. */
 .call:not(.hidden) ~ .toast { bottom: 130px; }
 
-/* ---------- App lock: neutral "Secure Login" screen ---------- */
+/* ---------- App lock: professional "Secure Login" screen ---------- */
 .lock-screen {
   position: fixed;
   inset: 0;
@@ -1232,80 +1232,117 @@ audio { width: 280px; display: block; margin-bottom: 4px; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
-  background: #e9edf1;
-  background: linear-gradient(160deg, #eef1f4 0%, #dfe4ea 100%);
+  padding: 20px;
+  background:
+    radial-gradient(1100px 520px at 50% -10%, #f2f5f8 0%, transparent 60%),
+    linear-gradient(160deg, #e8edf2 0%, #d7dee6 55%, #cfd7e0 100%);
 }
 @media (prefers-color-scheme: dark) {
-  .lock-screen { background: linear-gradient(160deg, #1b2027 0%, #0f1319 100%); }
+  .lock-screen {
+    background:
+      radial-gradient(1100px 520px at 50% -10%, #1a222c 0%, transparent 60%),
+      linear-gradient(160deg, #141a21 0%, #0d1218 100%);
+  }
 }
 .lock-card {
   width: 100%;
-  max-width: 340px;
+  max-width: 376px;
   background: #ffffff;
-  border: 1px solid #d4dae1;
-  border-radius: 6px;
-  padding: 34px 28px 28px;
-  box-shadow: 0 10px 34px rgba(20, 30, 48, 0.16);
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  border: 1px solid #dde3ea;
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px rgba(23, 38, 61, 0.22), 0 2px 6px rgba(23, 38, 61, 0.08);
 }
 @media (prefers-color-scheme: dark) {
-  .lock-card { background: #161b22; border-color: #2a323c; }
+  .lock-card { background: #141b23; border-color: #28313c; }
 }
+.lock-accent { height: 5px; background: linear-gradient(90deg, #39557e, #4f7bb3 55%, #39557e); }
+.lock-body { padding: 34px 32px 26px; text-align: center; }
 .lock-mark {
-  width: 54px;
-  height: 54px;
-  margin: 0 auto 10px;
-  border-radius: 50%;
-  background: #eef1f4;
+  width: 62px;
+  height: 62px;
+  margin: 2px auto 14px;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #eef2f7, #dde6f0);
   display: flex;
   align-items: center;
   justify-content: center;
+  box-shadow: inset 0 0 0 1px rgba(57, 85, 126, 0.12);
 }
-.lock-mark svg { width: 28px; height: 28px; fill: #5b6670; }
+.lock-mark svg { width: 32px; height: 32px; fill: #3f6391; }
 @media (prefers-color-scheme: dark) {
-  .lock-mark { background: #222a33; }
-  .lock-mark svg { fill: #9aa6b2; }
+  .lock-mark { background: linear-gradient(160deg, #1d2732, #18212b); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05); }
+  .lock-mark svg { fill: #6f9bd0; }
 }
-.lock-title { font-size: 21px; font-weight: 600; margin: 0; color: #2b333c; letter-spacing: 0.2px; }
-.lock-sub { font-size: 12.5px; color: #8a949e; margin: 2px 0 18px; }
+.lock-title { font-size: 23px; font-weight: 700; margin: 0; color: #223042; letter-spacing: 0.2px; }
+.lock-sub { font-size: 13px; color: #8894a2; margin: 5px 0 22px; }
 @media (prefers-color-scheme: dark) {
-  .lock-title { color: #e6ebf0; }
-  .lock-sub { color: #828d98; }
+  .lock-title { color: #e8eef4; }
+  .lock-sub { color: #828e9b; }
 }
-.lock-label { font-size: 12px; color: #6b7682; text-align: left; margin-bottom: 5px; font-weight: 600; }
-.lock-card input {
+.lock-label { display: block; font-size: 12px; color: #65727f; text-align: left; margin-bottom: 6px; font-weight: 600; letter-spacing: 0.2px; }
+.lock-input { position: relative; }
+.lock-input input {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #c4ccd4;
-  border-radius: 4px;
-  background: #fbfcfd;
+  padding: 12px 42px 12px 14px;
+  border: 1px solid #cad2db;
+  border-radius: 9px;
+  background: #f9fbfc;
   outline: none;
   font-size: 15px;
-  margin-bottom: 14px;
 }
-.lock-card input:focus { border-color: #5a7fae; box-shadow: 0 0 0 3px rgba(90, 127, 174, 0.18); }
+.lock-input input:focus { border-color: #4f7bb3; box-shadow: 0 0 0 3px rgba(79, 123, 179, 0.18); background: #fff; }
 @media (prefers-color-scheme: dark) {
-  .lock-card input { background: #1d242c; border-color: #323c47; color: #e6ebf0; }
+  .lock-input input { background: #1b232c; border-color: #323d49; color: #e8eef4; }
+  .lock-input input:focus { background: #1f2831; }
 }
+.lock-eye {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  border: 0;
+  background: none;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #9aa6b3;
+}
+.lock-eye:hover { background: rgba(79, 123, 179, 0.1); color: #4f7bb3; }
+.lock-eye.on { color: #4f7bb3; }
+.lock-eye svg { width: 20px; height: 20px; fill: currentColor; }
 .lock-btn {
   width: 100%;
-  padding: 11px;
+  margin-top: 18px;
+  padding: 12px;
   border: 0;
-  border-radius: 4px;
-  background: #3f6391;
+  border-radius: 9px;
+  background: linear-gradient(180deg, #4a6fa0, #3f6391);
   color: #fff;
   font-weight: 600;
   font-size: 15px;
   cursor: pointer;
   letter-spacing: 0.3px;
+  box-shadow: 0 2px 6px rgba(57, 85, 126, 0.3);
 }
-.lock-btn:hover { background: #355379; }
+.lock-btn:hover { background: #37567d; }
 .lock-btn:active { transform: translateY(1px); }
-.lock-error { color: #c0392b; font-size: 13px; min-height: 18px; margin-top: 10px; }
+.lock-error { color: #c0392b; font-size: 13px; min-height: 18px; margin-top: 12px; font-weight: 500; }
+.lock-foot {
+  border-top: 1px solid #eceff3;
+  padding: 13px;
+  text-align: center;
+  font-size: 11.5px;
+  color: #98a3b0;
+  background: #fafbfc;
+}
+@media (prefers-color-scheme: dark) {
+  .lock-foot { border-color: #222a34; background: #111821; color: #74808d; }
+}
 
 .applock-buttons { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
 .applock-buttons .btn-primary, .applock-buttons .dialog-btn { flex: 1; min-width: 120px; }
